@@ -1,0 +1,63 @@
+# Vocabulario
+
+Aplicación de escritorio para aprender vocabulario con cuestionarios de pares de palabras (Tauri 2 + Svelte 5 + SQLite).
+
+- Pregunta las palabras en orden aleatorio y repite las falladas al final, en nuevas rondas, hasta acertarlas todas.
+- Al terminar muestra el tiempo, los errores de la primera vuelta y los errores totales. El historial se guarda por usuario.
+- Modos: sentido A→B o B→A; respuesta escrita (con teclado o a mano) o autoevaluación.
+- Biblioteca con carpetas anidadas, compartida por todos los usuarios. Exportación e importación en JSON.
+- Escritura a mano reconocida en local con [TrOCR-small-handwritten](https://huggingface.co/Xenova/trocr-small-handwritten) (incluido en la aplicación; no hace falta conexión).
+
+## Reglas de corrección
+
+- **Teclado:** la respuesta debe coincidir exactamente, tildes incluidas. Solo se tolera que la primera letra cambie de mayúscula a minúscula o al revés, y se ignoran los espacios sobrantes.
+- **Aclaraciones:** lo que va entre paréntesis (`bank (of a river)`) se muestra al preguntar, pero no hace falta escribirlo.
+- **A mano:** no se comprueban tildes ni la diferencia ñ/n. Si la IA lee mal una respuesta correcta, el botón «La IA se equivocó» (tecla <kbd>C</kbd>) la da por buena.
+- **Autoevaluación:** <kbd>Espacio</kbd>/<kbd>Intro</kbd> muestran la respuesta y, después, la dan por buena; <kbd>N</kbd> la da por mala.
+
+## Requisitos (Linux Mint / Ubuntu)
+
+```bash
+sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+y Node.js 20 o superior.
+
+## Uso
+
+```bash
+npm install          # también descarga el modelo de escritura a mano (~65 MB) a static/models
+npm run tauri dev    # aplicación en modo desarrollo
+npm run tauri build  # instaladores .deb y AppImage en src-tauri/target/release/bundle/
+```
+
+Los datos se guardan en `~/.config/com.asantos.vocabulario/vocab.db` (la ruta exacta aparece en la pantalla de usuarios). Para hacer una copia de seguridad completa basta con copiar ese fichero.
+
+## Desarrollo
+
+```bash
+npm test             # tests unitarios (corrección, motor de rondas, exportar/importar)
+npm run check        # comprobación de tipos (svelte-check)
+npm run dev          # solo la interfaz, en un navegador normal en http://localhost:1420
+```
+
+Con `npm run dev` en un navegador (sin Tauri) se activa un simulador **solo de desarrollo** (`src/lib/db/devMock.ts`). Usa SQLite en WebAssembly con las mismas migraciones de `src-tauri/src/lib.rs` y guarda los datos en `localStorage`. No se incluye en la aplicación empaquetada.
+
+Prueba manual del reconocimiento con imágenes (`<fuente>_<palabra>.png`):
+
+```bash
+HW_IMAGES=/ruta/a/imagenes npx vitest run tests-manual --silent=false --reporter=verbose
+```
+
+Los umbrales de aceptación (`MARGIN`, `MIN_SCORE`) están en `src/lib/handwriting/core.ts`. Durante una sesión a mano, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> muestra las puntuaciones para calibrarlos.
+
+## Estructura
+
+| Ruta | Contenido |
+|---|---|
+| `src/lib/quiz/` | Corrección de respuestas, motor de rondas, lista de idiomas |
+| `src/lib/db/` | Acceso a SQLite (`repo.ts` concentra todo el SQL) |
+| `src/lib/handwriting/` | Lienzo, Web Worker y lógica de reconocimiento |
+| `src/routes/` | Pantallas: usuarios, biblioteca, editor, práctica, resultados, historial |
+| `src-tauri/src/lib.rs` | Migraciones de la base de datos y comandos para leer y escribir ficheros de exportación |
