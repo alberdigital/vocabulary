@@ -58,6 +58,9 @@
   const fromLang = $derived(quiz ? langName(opts.direction === 'AB' ? quiz.langA : quiz.langB) : '');
   const toLang = $derived(quiz ? langName(opts.direction === 'AB' ? quiz.langB : quiz.langA) : '');
   const handwriting = $derived(opts.answerMode === 'typed' && opts.inputMode === 'handwriting');
+  const hwButtonLabel = $derived(
+    phase === 'checking' ? (modelState === 'ready' ? 'Leyendo…' : 'Cargando…') : canvasEmpty ? 'No lo sé' : 'Comprobar'
+  );
 
   $effect(() => {
     const id = quizId;
@@ -155,7 +158,12 @@
   async function submitHandwriting() {
     if (phase !== 'ask' || !hwCanvas) return;
     const image = hwCanvas.getImage();
-    if (!image) return;
+    if (!image) {
+      // Sin nada escrito el botón es «No lo sé»: cuenta como fallo.
+      record(false, null);
+      showFeedback();
+      return;
+    }
     phase = 'checking';
     try {
       const r = await hwCheck(image, expectedText);
@@ -175,7 +183,7 @@
   }
 
   function overrideAsCorrect() {
-    if (!engine || phase !== 'feedback' || lastCorrect) return;
+    if (!engine || phase !== 'feedback' || lastCorrect || lastGiven === null) return;
     engine.overrideLastAsCorrect();
     lastCorrect = true;
     version++;
@@ -394,8 +402,13 @@
             <div class="row center">
               <button onpointerdown={noFocus} onclick={() => hwCanvas?.clear()} disabled={phase !== 'ask'}>Borrar <kbd>Supr</kbd></button>
               <button onpointerdown={noFocus} onclick={() => hwCanvas?.undo()} disabled={phase !== 'ask'}>Deshacer <kbd>Ctrl+Z</kbd></button>
-              <button class="primary" onpointerdown={noFocus} onclick={submitHandwriting} disabled={phase !== 'ask' || canvasEmpty}>
-                {phase === 'checking' ? (modelState === 'ready' ? 'Leyendo…' : 'Cargando modelo…') : 'Comprobar'}
+              <button class="primary" onpointerdown={noFocus} onclick={submitHandwriting} disabled={phase !== 'ask'}>
+                <!-- Todos los textos apilados para que el botón no cambie de tamaño al cambiar el visible. -->
+                <span class="stack">
+                  {#each ['Comprobar', 'No lo sé', 'Leyendo…', 'Cargando…'] as label (label)}
+                    <span class:shown={label === hwButtonLabel}>{label}</span>
+                  {/each}
+                </span>
                 <kbd>Intro</kbd>
               </button>
             </div>
@@ -411,12 +424,12 @@
             <div class="muted">{parse(expectedText).full}</div>
           {:else}
             <div class="verdict">✗ No es correcto</div>
-            {#if handwriting}
+            {#if handwriting && lastGiven !== null}
               <div>La IA leyó: <strong>{lastGiven || '(nada)'}</strong></div>
             {/if}
             <div>Respuesta correcta: <strong>{parse(expectedText).full}</strong></div>
             <div class="row center">
-              {#if handwriting}
+              {#if handwriting && lastGiven !== null}
                 <button onpointerdown={noFocus} onclick={overrideAsCorrect}>La IA se equivocó, era correcto <kbd>C</kbd></button>
               {/if}
               <button class="primary" onpointerdown={noFocus} onclick={nextQuestion}>Continuar <kbd>Intro</kbd></button>
@@ -574,6 +587,17 @@
   input.wrong {
     border-color: var(--bad);
     background: var(--bad-bg);
+  }
+  .stack {
+    display: inline-grid;
+    justify-items: center;
+  }
+  .stack > span {
+    grid-area: 1 / 1;
+    visibility: hidden;
+  }
+  .stack > span.shown {
+    visibility: visible;
   }
   .hw {
     width: 100%;
