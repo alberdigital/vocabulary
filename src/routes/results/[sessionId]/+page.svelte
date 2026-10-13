@@ -78,16 +78,24 @@
 
     <div class="stats">
       <div class="card stat">
-        <div class="value">{formatDuration(session.durationMs)}</div>
-        <div class="label">Tiempo total</div>
+        <div class="value">{session.pairCount}</div>
+        <div class="label">Palabras</div>
+      </div>
+      <div class="card stat">
+        <div class="value" class:ok={session.firstRoundErrors === 0}>{session.pairCount - session.firstRoundErrors}</div>
+        <div class="label">Aciertos a la primera</div>
       </div>
       <div class="card stat">
         <div class="value" class:bad={session.firstRoundErrors > 0}>{session.firstRoundErrors}</div>
-        <div class="label">Errores en la primera vuelta<br /><span class="muted">de {session.pairCount} palabras</span></div>
+        <div class="label">Errores en la primera vuelta</div>
       </div>
       <div class="card stat">
         <div class="value" class:bad={session.totalErrors > 0}>{session.totalErrors}</div>
         <div class="label">Errores en total<br /><span class="muted">{session.rounds} ronda{session.rounds === 1 ? '' : 's'}</span></div>
+      </div>
+      <div class="card stat">
+        <div class="value">{formatDuration(session.durationMs)}</div>
+        <div class="label">Tiempo total</div>
       </div>
     </div>
 
@@ -134,7 +142,7 @@
   }
   .stats {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: 0.75rem;
     margin: 1.25rem 0;
   }
@@ -148,6 +156,9 @@
   }
   .value.bad {
     color: var(--bad);
+  }
+  .value.ok {
+    color: var(--ok);
   }
   .label {
     font-size: 0.9rem;
