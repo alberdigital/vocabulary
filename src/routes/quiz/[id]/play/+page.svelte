@@ -541,6 +541,19 @@
   .center {
     justify-content: center;
   }
+  /* Botones de la práctica: grandes, que sobra espacio y se pulsan a menudo. */
+  .stage button {
+    font-size: 1.2rem;
+    padding: 0.7rem 1.4rem;
+    border-radius: 8px;
+  }
+  .stage button.big {
+    font-size: 1.4rem;
+    padding: 0.9rem 2rem;
+  }
+  .stage .row {
+    gap: 0.8rem;
+  }
   .typed {
     display: flex;
     gap: 0.5rem;
