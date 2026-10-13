@@ -556,13 +556,16 @@
   }
   .typed {
     display: flex;
-    gap: 0.5rem;
-    width: min(520px, 100%);
+    flex-direction: column;
+    align-items: center;
+    gap: 0.8rem;
+    width: min(640px, 100%);
   }
   .typed input {
-    flex: 1;
-    font-size: 1.4rem;
-    padding: 0.5rem 0.75rem;
+    width: 100%;
+    font-size: 1.5rem;
+    padding: 0.7rem 1rem;
+    text-align: center;
   }
   input.right {
     border-color: var(--ok);
