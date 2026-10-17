@@ -131,6 +131,13 @@ button.bad {
   border-color: var(--bad);
   color: #fff;
 }
+/* Al pasar el ratón, el mismo color un poco más claro (no el gris de los botones normales). */
+button.ok:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ok) 85%, #fff);
+}
+button.bad:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bad) 85%, #fff);
+}
 button.link {
   border: none;
   background: none;
