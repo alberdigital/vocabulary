@@ -1,6 +1,6 @@
 // Formato JSON para compartir cuestionarios y carpetas (no incluye usuarios ni historial).
 
-import type { Folder } from './db/types';
+import type { Folder, SessionOptions } from './db/types';
 
 export interface ExportQuiz {
   name: string;
@@ -83,6 +83,8 @@ export function parseExport(text: string): ExportFile {
     throw new Error('El fichero no es JSON válido');
   }
   const d = data as ExportFile;
+  if ((data as BoxExportFile)?.format === 'vocabulario-leitner')
+    throw new Error('El fichero es una caja de Leitner: impórtalo desde la pestaña «Cajas de Leitner»');
   if (d?.format !== 'vocabulario') throw new Error('El fichero no es una exportación de Vocabulario');
   if (d.version !== 1) throw new Error(`Versión de fichero no soportada: ${String(d.version)}`);
   if (!Array.isArray(d.folders) || !d.folders.every(isFolder) || !Array.isArray(d.quizzes) || !d.quizzes.every(isQuiz))
@@ -116,4 +118,120 @@ export async function importInto(file: ExportFile, parentId: number | null, targ
   for (const f of file.folders) await addFolder(f, parentId);
   for (const q of file.quizzes) await addQuiz(q, parentId);
   return count;
+}
+
+// ---------- Cajas de Leitner ----------
+
+export interface ExportBox extends SessionOptions {
+  name: string;
+  firstCapacity: number;
+}
+
+/** Una caja con sus cuestionarios completos y el compartimento de cada palabra. */
+export interface BoxExportFile {
+  format: 'vocabulario-leitner';
+  version: 1;
+  box: ExportBox;
+  quizzes: ExportQuiz[];
+  /** [índice del cuestionario, índice del par, compartimento (0 = pendiente … 6 = aprendida)] */
+  cards: [number, number, number][];
+  /** Palabras quitadas a mano: [índice del cuestionario, índice del par] */
+  excluded: [number, number][];
+}
+
+/** Datos de una palabra de la caja para exportarla. */
+export interface BoxExportPair {
+  a: string;
+  b: string;
+  /** null si la palabra está excluida de la caja. */
+  compartment: number | null;
+}
+
+export function buildBoxExport(box: ExportBox, quizzes: (Omit<ExportQuiz, 'pairs'> & { pairs: BoxExportPair[] })[]): BoxExportFile {
+  const cards: [number, number, number][] = [];
+  const excluded: [number, number][] = [];
+  quizzes.forEach((q, qi) =>
+    q.pairs.forEach((p, pi) => {
+      if (p.compartment === null) excluded.push([qi, pi]);
+      else cards.push([qi, pi, p.compartment]);
+    })
+  );
+  return {
+    format: 'vocabulario-leitner',
+    version: 1,
+    box: {
+      name: box.name,
+      firstCapacity: box.firstCapacity,
+      direction: box.direction,
+      answerMode: box.answerMode,
+      inputMode: box.inputMode,
+    },
+    quizzes: quizzes.map((q) => ({ name: q.name, langA: q.langA, langB: q.langB, pairs: q.pairs.map((p) => [p.a, p.b]) })),
+    cards,
+    excluded,
+  };
+}
+
+const isIndexTuple = (x: unknown, len: number) =>
+  Array.isArray(x) && x.length === len && x.every((n) => Number.isInteger(n) && n >= 0);
+
+export function parseBoxExport(text: string): BoxExportFile {
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error('El fichero no es JSON válido');
+  }
+  const d = data as BoxExportFile;
+  if ((data as ExportFile)?.format === 'vocabulario')
+    throw new Error('El fichero contiene cuestionarios, no una caja: impórtalo desde la pestaña «Cuestionarios»');
+  if (d?.format !== 'vocabulario-leitner') throw new Error('El fichero no es una caja de Leitner de Vocabulario');
+  if (d.version !== 1) throw new Error(`Versión de fichero no soportada: ${String(d.version)}`);
+  const b = d.box;
+  const ok =
+    typeof b?.name === 'string' &&
+    Number.isInteger(b.firstCapacity) &&
+    b.firstCapacity > 0 &&
+    (b.direction === 'AB' || b.direction === 'BA') &&
+    (b.answerMode === 'typed' || b.answerMode === 'self') &&
+    (b.inputMode === 'keyboard' || b.inputMode === 'handwriting') &&
+    Array.isArray(d.quizzes) &&
+    d.quizzes.every(isQuiz) &&
+    Array.isArray(d.cards) &&
+    d.cards.every((c) => isIndexTuple(c, 3) && c[2] <= 6 && d.quizzes[c[0]]?.pairs[c[1]] !== undefined) &&
+    Array.isArray(d.excluded) &&
+    d.excluded.every((c) => isIndexTuple(c, 2) && d.quizzes[c[0]]?.pairs[c[1]] !== undefined);
+  if (!ok) throw new Error('El fichero tiene un formato incorrecto');
+  return d;
+}
+
+export interface BoxImportTarget {
+  createFolder(name: string, parentId: number | null): Promise<number>;
+  createQuiz(
+    name: string,
+    folderId: number | null,
+    langA: string,
+    langB: string,
+    pairs: { a: string; b: string }[]
+  ): Promise<number>;
+  /** Ids de los pares del cuestionario, en orden. */
+  pairIds(quizId: number): Promise<number[]>;
+  createBox(box: ExportBox, quizIds: number[], excludedPairIds: number[]): Promise<number>;
+  setCompartment(boxId: number, pairId: number, compartment: number): Promise<void>;
+}
+
+/** Crea los cuestionarios en una carpeta nueva con el nombre de la caja, y la caja con su progreso. */
+export async function importBoxInto(file: BoxExportFile, target: BoxImportTarget): Promise<number> {
+  const folderId = await target.createFolder(file.box.name, null);
+  const quizIds: number[] = [];
+  const pairIds: number[][] = [];
+  for (const q of file.quizzes) {
+    const id = await target.createQuiz(q.name, folderId, q.langA, q.langB, q.pairs.map(([a, b]) => ({ a, b })));
+    quizIds.push(id);
+    pairIds.push(await target.pairIds(id));
+  }
+  const excluded = file.excluded.map(([qi, pi]) => pairIds[qi][pi]);
+  const boxId = await target.createBox(file.box, quizIds, excluded);
+  for (const [qi, pi, compartment] of file.cards) await target.setCompartment(boxId, pairIds[qi][pi], compartment);
+  return boxId;
 }

@@ -1,15 +1,18 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import * as repo from '$lib/db/repo';
-  import type { SessionRecord } from '$lib/db/types';
+  import type { LeitnerSessionRecord, SessionRecord } from '$lib/db/types';
   import { app, formatDate, formatDuration } from '$lib/state.svelte';
 
   let sessions = $state<SessionRecord[]>([]);
+  let boxSessions = $state<LeitnerSessionRecord[]>([]);
   let filter = $state('');
 
   $effect(() => {
     const user = app.user;
-    if (user) repo.listSessions(user.id).then((s) => (sessions = s));
+    if (!user) return;
+    repo.listSessions(user.id).then((s) => (sessions = s));
+    repo.listLeitnerSessions(user.id).then((s) => (boxSessions = s));
   });
 
   /** Cuestionarios presentes en el historial (por nombre guardado, por si se han borrado). */
@@ -23,8 +26,10 @@
   }
 </script>
 
+<h1>Historial de {app.user?.name}</h1>
+
 <div class="row head">
-  <h1>Historial de {app.user?.name}</h1>
+  <h2>Cuestionarios</h2>
   {#if quizNames.length > 1}
     <select bind:value={filter}>
       <option value="">Todos los cuestionarios</option>
@@ -64,13 +69,47 @@
   </table>
 {/if}
 
+<h2 class="second">Cajas de Leitner</h2>
+{#if boxSessions.length === 0}
+  <p class="muted">Todavía no has practicado ninguna caja.</p>
+{:else}
+  <table>
+    <thead>
+      <tr>
+        <th>Fecha</th>
+        <th>Caja</th>
+        <th class="num">Aciertos</th>
+        <th class="num">Fallos</th>
+        <th class="num">Tiempo</th>
+      </tr>
+    </thead>
+    <tbody>
+      {#each boxSessions as s (s.id)}
+        <tr>
+          <td>{formatDate(s.finishedAt)}</td>
+          <td>
+            {s.boxName}{#if s.boxId === null}<span class="muted"> (borrada)</span>{/if}
+            {#if s.abandoned}<span class="muted"> · abandonada</span>{/if}
+          </td>
+          <td class="num">{s.correct}</td>
+          <td class="num">{s.errors}</td>
+          <td class="num">{formatDuration(s.durationMs)}</td>
+        </tr>
+      {/each}
+    </tbody>
+  </table>
+{/if}
+
 <style>
   .head {
     justify-content: space-between;
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
   }
-  .head h1 {
+  .head h2 {
     margin: 0;
+  }
+  .second {
+    margin-top: 2rem;
   }
   .num {
     text-align: right;

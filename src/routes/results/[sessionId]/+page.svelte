@@ -110,7 +110,7 @@
           <button onclick={repeatFailed}>Repetir solo las falladas</button>
         {/if}
       {/if}
-      <button onclick={() => goto('/library')}>Volver a la biblioteca</button>
+      <button onclick={() => goto('/library')}>Volver a los cuestionarios</button>
       <button class="link" onclick={() => goto('/history')}>Ver historial</button>
     </div>
 

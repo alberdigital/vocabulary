@@ -112,7 +112,10 @@
   async function deleteFolder() {
     if (!selectedFolder) return;
     const n = await repo.countQuizzesInTree(selectedFolder.id);
-    const what = n === 0 ? 'Está vacía de cuestionarios.' : `Se borrarán también ${n} cuestionario${n === 1 ? '' : 's'}.`;
+    const what =
+      n === 0
+        ? 'Está vacía de cuestionarios.'
+        : `Se borrarán también ${n} cuestionario${n === 1 ? '' : 's'}, y sus palabras se quitarán de las cajas de Leitner que los usen.`;
     if (!(await confirmDanger(`¿Borrar la carpeta «${selectedFolder.name}» y sus subcarpetas? ${what}`))) return;
     const parent = selectedFolder.parentId;
     await repo.deleteFolder(selectedFolder.id);
@@ -137,7 +140,11 @@
   }
 
   async function deleteQuiz(q: QuizSummary) {
-    if (!(await confirmDanger(`¿Borrar el cuestionario «${q.name}»? El historial de resultados se conserva.`))) return;
+    const boxes = await repo.boxesUsingQuiz(q.id);
+    const inBoxes =
+      boxes === 0 ? '' : ` Está en ${boxes} caja${boxes === 1 ? '' : 's'} de Leitner; sus palabras se quitarán de ella${boxes === 1 ? '' : 's'}.`;
+    if (!(await confirmDanger(`¿Borrar el cuestionario «${q.name}»? El historial de resultados se conserva.${inBoxes}`)))
+      return;
     await repo.deleteQuiz(q.id);
     await loadQuizzes(selected);
   }
@@ -152,7 +159,7 @@
 
   async function doExportFolder() {
     try {
-      if (await exportFolder(selected)) flash(selected === null ? 'Biblioteca exportada' : 'Carpeta exportada');
+      if (await exportFolder(selected)) flash(selected === null ? 'Cuestionarios exportados' : 'Carpeta exportada');
     } catch (e) {
       showError(e);
     }
@@ -208,7 +215,7 @@
     <div class="row actions">
       <button class="primary" onclick={newQuiz}>+ Nuevo cuestionario</button>
       <button onclick={doImport}>Importar…</button>
-      <button onclick={doExportFolder}>{selected === null ? 'Exportar toda la biblioteca…' : 'Exportar carpeta…'}</button>
+      <button onclick={doExportFolder}>{selected === null ? 'Exportar todos los cuestionarios…' : 'Exportar carpeta…'}</button>
       {#if notice}<span class="notice">{notice}</span>{/if}
     </div>
 

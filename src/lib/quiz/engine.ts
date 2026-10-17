@@ -21,7 +21,19 @@ export const fisherYates: Shuffle = <U>(items: U[]): U[] => {
   return a;
 };
 
-export class QuizEngine<T> {
+/** Lo que necesita la pantalla de práctica de un motor (cuestionarios o cajas de Leitner). */
+export interface PracticeEngine<T> {
+  readonly current: T | undefined;
+  readonly finished: boolean;
+  readonly round: number;
+  readonly roundSize: number;
+  readonly roundDone: number;
+  readonly totalErrors: number;
+  answer(correct: boolean, given?: string | null, elapsedMs?: number): void;
+  overrideLastAsCorrect(): void;
+}
+
+export class QuizEngine<T> implements PracticeEngine<T> {
   round = 1;
   queue: T[];
   failedThisRound: T[] = [];

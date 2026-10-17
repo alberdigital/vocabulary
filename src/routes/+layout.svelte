@@ -48,9 +48,10 @@
   {#if app.user && !inSession}
     <header>
       <nav>
-        <a href="/library" class:active={page.url.pathname.startsWith('/library') || page.url.pathname.includes('/edit')}
-          >Biblioteca</a
+        <a href="/library" class:active={page.url.pathname.startsWith('/library') || page.url.pathname.startsWith('/quiz/')}
+          >Cuestionarios</a
         >
+        <a href="/leitner" class:active={page.url.pathname.startsWith('/leitner')}>Cajas de Leitner</a>
         <a href="/history" class:active={page.url.pathname.startsWith('/history') || page.url.pathname.startsWith('/results')}
           >Historial</a
         >

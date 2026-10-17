@@ -4,11 +4,12 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 const DB_URL: &str = "sqlite:vocab.db";
 
 fn migrations() -> Vec<Migration> {
-    vec![Migration {
-        version: 1,
-        description: "esquema inicial",
-        kind: MigrationKind::Up,
-        sql: r#"
+    vec![
+        Migration {
+            version: 1,
+            description: "esquema inicial",
+            kind: MigrationKind::Up,
+            sql: r#"
 CREATE TABLE users (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
@@ -75,7 +76,62 @@ CREATE INDEX idx_pairs_quiz ON pairs(quiz_id, position);
 CREATE INDEX idx_sessions_user ON sessions(user_id, finished_at);
 CREATE INDEX idx_answers_session ON answers(session_id);
 "#,
-    }]
+        },
+        Migration {
+            version: 2,
+            description: "cajas de Leitner",
+            kind: MigrationKind::Up,
+            sql: r#"
+CREATE TABLE leitner_boxes (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  first_capacity INTEGER NOT NULL,
+  direction TEXT NOT NULL CHECK (direction IN ('AB','BA')),
+  answer_mode TEXT NOT NULL CHECK (answer_mode IN ('typed','self')),
+  input_mode TEXT NOT NULL CHECK (input_mode IN ('keyboard','handwriting')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE leitner_box_quizzes (
+  box_id INTEGER NOT NULL REFERENCES leitner_boxes(id) ON DELETE CASCADE,
+  quiz_id INTEGER NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+  PRIMARY KEY (box_id, quiz_id)
+);
+CREATE TABLE leitner_excluded_pairs (
+  box_id INTEGER NOT NULL REFERENCES leitner_boxes(id) ON DELETE CASCADE,
+  pair_id INTEGER NOT NULL REFERENCES pairs(id) ON DELETE CASCADE,
+  PRIMARY KEY (box_id, pair_id)
+);
+-- compartment: 0 = pendiente, 1-5 = compartimentos, 6 = aprendida
+CREATE TABLE leitner_cards (
+  box_id INTEGER NOT NULL REFERENCES leitner_boxes(id) ON DELETE CASCADE,
+  pair_id INTEGER NOT NULL REFERENCES pairs(id) ON DELETE CASCADE,
+  compartment INTEGER NOT NULL CHECK (compartment BETWEEN 0 AND 6),
+  moved_at TEXT NOT NULL,
+  PRIMARY KEY (box_id, pair_id)
+);
+CREATE TABLE leitner_sessions (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  box_id INTEGER NULL REFERENCES leitner_boxes(id) ON DELETE SET NULL,
+  box_name TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  finished_at TEXT NOT NULL,
+  duration_ms INTEGER NOT NULL,
+  correct INTEGER NOT NULL,
+  errors INTEGER NOT NULL,
+  abandoned INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_leitner_boxes_user ON leitner_boxes(user_id);
+CREATE INDEX idx_leitner_box_quizzes_quiz ON leitner_box_quizzes(quiz_id);
+CREATE INDEX idx_leitner_excluded_pair ON leitner_excluded_pairs(pair_id);
+CREATE INDEX idx_leitner_cards_pair ON leitner_cards(pair_id);
+CREATE INDEX idx_leitner_cards_box ON leitner_cards(box_id, compartment);
+CREATE INDEX idx_leitner_sessions_user ON leitner_sessions(user_id, finished_at);
+"#,
+        },
+    ]
 }
 
 /// Escribe un fichero de texto en la ruta que el usuario eligió en el diálogo de guardar.

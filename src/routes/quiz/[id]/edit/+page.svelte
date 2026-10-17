@@ -28,6 +28,8 @@
   let pasteMsg = $state('');
   let statusMsg = $state('');
   let tbody: HTMLTableSectionElement | undefined = $state();
+  /** Se han intercambiado las columnas desde el último guardado (afecta al sentido de las cajas). */
+  let swapped = false;
   let nextKey = 1;
 
   const row = (id: number | null, a: string, b: string): Row => ({ key: nextKey++, id, a, b });
@@ -59,9 +61,36 @@
   );
   const canSave = $derived(name.trim() !== '' && errors.size === 0);
 
+  /** Avisa si el guardado afecta a cajas de Leitner. Devuelve false si se cancela. */
+  async function confirmBoxChanges(q: Quiz): Promise<boolean> {
+    const keep = new Set(filled.map((r) => r.id));
+    const removed = q.pairs.map((p) => p.id).filter((id): id is number => id !== null && !keep.has(id));
+    const used = await repo.boxesUsingPairs(removed);
+    if (used.pairs > 0) {
+      const ok = await confirmDanger(
+        `Se ${used.pairs === 1 ? 'quitará 1 palabra' : `quitarán ${used.pairs} palabras`} de ${used.boxes} caja${used.boxes === 1 ? '' : 's'} de Leitner (de todos sus compartimentos). ¿Guardar?`,
+        'Guardar'
+      );
+      if (!ok) return false;
+    }
+    if (swapped) {
+      const boxes = await repo.boxesUsingQuiz(q.id);
+      if (
+        boxes > 0 &&
+        !(await confirmDanger(
+          `Has intercambiado las columnas. Este cuestionario está en ${boxes} caja${boxes === 1 ? '' : 's'} de Leitner, que ${boxes === 1 ? 'lo preguntará' : 'lo preguntarán'} en el sentido contrario (el progreso se conserva). ¿Guardar?`,
+          'Guardar'
+        ))
+      )
+        return false;
+    }
+    return true;
+  }
+
   async function save(): Promise<boolean> {
     if (!quiz || !canSave) return false;
     try {
+      if (!(await confirmBoxChanges(quiz))) return false;
       const updated: Quiz = {
         ...quiz,
         name: name.trim(),
@@ -78,6 +107,7 @@
         if (rows.length === 0) rows.push(row(null, '', ''));
         saved = snapshot();
       }
+      swapped = false;
       statusMsg = 'Guardado';
       setTimeout(() => (statusMsg = ''), 2000);
       return true;
@@ -150,6 +180,7 @@
   }
 
   function swapLanguages() {
+    swapped = !swapped;
     [langA, langB] = [langB, langA];
     for (const r of rows) [r.a, r.b] = [r.b, r.a];
   }
@@ -162,7 +193,7 @@
 {#if quiz}
   <div class="row top">
     <button class="link" onclick={() => goto(quiz?.folderId ? `/library?folder=${quiz.folderId}` : '/library')}>
-      ← Biblioteca
+      ← Cuestionarios
     </button>
     <div class="row">
       {#if statusMsg}<span class="ok">{statusMsg}</span>{/if}

@@ -2,10 +2,16 @@
 // El plugin SQL usa un pool de conexiones, así que no se usan transacciones:
 // las escrituras de varias filas se hacen con un único INSERT de varias filas.
 
+import { fisherYates } from '$lib/quiz/engine';
+import { LEARNED, refillCount } from '$lib/leitner/core';
 import { db } from './client';
 import type {
   AnswerRecord,
+  BoxSelection,
   Folder,
+  LeitnerBox,
+  LeitnerCard,
+  LeitnerSessionRecord,
   Quiz,
   QuizStats,
   QuizSummary,
@@ -422,6 +428,273 @@ export async function quizStats(userId: number, quizId: number): Promise<QuizSta
     bestMs: agg[0]?.best ?? null,
     lastFirstRoundErrors: last[0]?.first_round_errors ?? null,
   };
+}
+
+// ---------- Cajas de Leitner ----------
+
+interface BoxRow {
+  id: number;
+  user_id: number;
+  name: string;
+  first_capacity: number;
+  direction: 'AB' | 'BA';
+  answer_mode: 'typed' | 'self';
+  input_mode: 'keyboard' | 'handwriting';
+  created_at: string;
+  updated_at: string;
+}
+
+const toBox = (r: BoxRow): LeitnerBox => ({
+  id: r.id,
+  userId: r.user_id,
+  name: r.name,
+  firstCapacity: r.first_capacity,
+  direction: r.direction,
+  answerMode: r.answer_mode,
+  inputMode: r.input_mode,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
+
+export type BoxSettings = Pick<LeitnerBox, 'name' | 'firstCapacity' | 'direction' | 'answerMode' | 'inputMode'>;
+
+/** Lista de ids como "$2,$3,…" a partir del parámetro offset + 1. */
+const idList = (ids: unknown[], offset: number) => ids.map((_, i) => `$${offset + i + 1}`).join(',');
+
+export async function listBoxes(userId: number): Promise<LeitnerBox[]> {
+  const rows = await select<BoxRow>('SELECT * FROM leitner_boxes WHERE user_id = $1 ORDER BY name COLLATE NOCASE', [
+    userId,
+  ]);
+  return rows.map(toBox);
+}
+
+export async function getBox(id: number): Promise<LeitnerBox | null> {
+  const rows = await select<BoxRow>('SELECT * FROM leitner_boxes WHERE id = $1', [id]);
+  return rows[0] ? toBox(rows[0]) : null;
+}
+
+export async function createBox(userId: number, b: BoxSettings): Promise<number> {
+  const t = now();
+  return insert(
+    `INSERT INTO leitner_boxes (user_id, name, first_capacity, direction, answer_mode, input_mode, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [userId, b.name.trim(), b.firstCapacity, b.direction, b.answerMode, b.inputMode, t, t]
+  );
+}
+
+/** Guarda la configuración; si cambia la capacidad, el 1.er compartimento se rellena de nuevo. */
+export async function updateBox(id: number, b: BoxSettings): Promise<void> {
+  await exec(
+    `UPDATE leitner_boxes SET name = $1, first_capacity = $2, direction = $3, answer_mode = $4, input_mode = $5,
+       updated_at = $6 WHERE id = $7`,
+    [b.name.trim(), b.firstCapacity, b.direction, b.answerMode, b.inputMode, now(), id]
+  );
+  await refillBox(id);
+}
+
+export async function deleteBox(id: number): Promise<void> {
+  await exec('DELETE FROM leitner_boxes WHERE id = $1', [id]);
+}
+
+/** Pares de varios cuestionarios, agrupados por cuestionario y en su orden. */
+export async function pairsOfQuizzes(quizIds: number[]): Promise<Map<number, { id: number; a: string; b: string }[]>> {
+  const out = new Map<number, { id: number; a: string; b: string }[]>(quizIds.map((id) => [id, []]));
+  if (quizIds.length === 0) return out;
+  const rows = await select<{ id: number; quiz_id: number; a: string; b: string }>(
+    `SELECT id, quiz_id, a, b FROM pairs WHERE quiz_id IN (${idList(quizIds, 0)}) ORDER BY position, id`,
+    quizIds
+  );
+  for (const r of rows) out.get(r.quiz_id)?.push({ id: r.id, a: r.a, b: r.b });
+  return out;
+}
+
+export async function getBoxSelection(boxId: number): Promise<BoxSelection> {
+  const quizzes = await select<{ quiz_id: number }>('SELECT quiz_id FROM leitner_box_quizzes WHERE box_id = $1', [boxId]);
+  const excluded = await select<{ pair_id: number }>('SELECT pair_id FROM leitner_excluded_pairs WHERE box_id = $1', [
+    boxId,
+  ]);
+  return { quizIds: quizzes.map((r) => r.quiz_id), excludedPairIds: excluded.map((r) => r.pair_id) };
+}
+
+async function insertRows(table: string, cols: string[], rows: unknown[][]): Promise<void> {
+  const CHUNK = 400;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
+    await exec(
+      `INSERT OR IGNORE INTO ${table} (${cols.join(', ')}) VALUES ${valuesPlaceholders(chunk.length, cols.length)}`,
+      chunk.flat()
+    );
+  }
+}
+
+/** Sustituye la selección de la caja. Lo que deja de estar seleccionado pierde su progreso. */
+export async function setBoxSelection(boxId: number, sel: BoxSelection): Promise<void> {
+  await exec('DELETE FROM leitner_box_quizzes WHERE box_id = $1', [boxId]);
+  await insertRows('leitner_box_quizzes', ['box_id', 'quiz_id'], sel.quizIds.map((q) => [boxId, q]));
+  await exec('DELETE FROM leitner_excluded_pairs WHERE box_id = $1', [boxId]);
+  await insertRows('leitner_excluded_pairs', ['box_id', 'pair_id'], sel.excludedPairIds.map((p) => [boxId, p]));
+  await exec(
+    `DELETE FROM leitner_cards WHERE box_id = $1 AND (
+       pair_id IN (SELECT pair_id FROM leitner_excluded_pairs WHERE box_id = $1)
+       OR pair_id NOT IN (SELECT p.id FROM pairs p JOIN leitner_box_quizzes bq ON bq.quiz_id = p.quiz_id WHERE bq.box_id = $1))`,
+    [boxId]
+  );
+  await syncBox(boxId);
+}
+
+/**
+ * Mete como pendientes, en orden aleatorio, las palabras de los cuestionarios de la caja que aún
+ * no están en ella (las recién marcadas o las añadidas después al cuestionario) y rellena el 1.º.
+ */
+export async function syncBox(boxId: number): Promise<void> {
+  const missing = await select<{ id: number }>(
+    `SELECT p.id FROM pairs p JOIN leitner_box_quizzes bq ON bq.quiz_id = p.quiz_id AND bq.box_id = $1
+     WHERE p.id NOT IN (SELECT pair_id FROM leitner_cards WHERE box_id = $1)
+       AND p.id NOT IN (SELECT pair_id FROM leitner_excluded_pairs WHERE box_id = $1)`,
+    [boxId]
+  );
+  const t = now();
+  await insertRows(
+    'leitner_cards',
+    ['box_id', 'pair_id', 'compartment', 'moved_at'],
+    fisherYates(missing).map((r) => [boxId, r.id, 0, t])
+  );
+  await refillBox(boxId);
+}
+
+/** Pasa al 1.er compartimento las pendientes más antiguas que quepan. */
+async function refillBox(boxId: number): Promise<void> {
+  const box = await getBox(boxId);
+  if (!box) return;
+  const counts = await boxCounts(boxId);
+  const n = refillCount(counts[1], counts[0], box.firstCapacity);
+  if (n === 0) return;
+  await exec(
+    `UPDATE leitner_cards SET compartment = 1, moved_at = $2 WHERE box_id = $1 AND pair_id IN (
+       SELECT pair_id FROM leitner_cards WHERE box_id = $1 AND compartment = 0 ORDER BY moved_at, rowid LIMIT $3)`,
+    [boxId, now(), n]
+  );
+}
+
+/** Palabras por compartimento: [pendientes, c1…c5, aprendidas]. */
+export async function boxCounts(boxId: number): Promise<number[]> {
+  const rows = await select<{ compartment: number; n: number }>(
+    'SELECT compartment, COUNT(*) AS n FROM leitner_cards WHERE box_id = $1 GROUP BY compartment',
+    [boxId]
+  );
+  const counts = new Array(LEARNED + 1).fill(0);
+  for (const r of rows) counts[r.compartment] = r.n;
+  return counts;
+}
+
+/** Todas las palabras de la caja, de la más antigua a la más reciente en su compartimento. */
+export async function boxCards(boxId: number): Promise<LeitnerCard[]> {
+  const rows = await select<{
+    pair_id: number;
+    compartment: number;
+    a: string;
+    b: string;
+    quiz_id: number;
+    quiz_name: string;
+    lang_a: string;
+    lang_b: string;
+  }>(
+    `SELECT c.pair_id, c.compartment, p.a, p.b, q.id AS quiz_id, q.name AS quiz_name, q.lang_a, q.lang_b
+     FROM leitner_cards c JOIN pairs p ON p.id = c.pair_id JOIN quizzes q ON q.id = p.quiz_id
+     WHERE c.box_id = $1 ORDER BY c.moved_at, c.rowid`,
+    [boxId]
+  );
+  return rows.map((r, i) => ({
+    pairId: r.pair_id,
+    compartment: r.compartment,
+    order: i,
+    a: r.a,
+    b: r.b,
+    quizId: r.quiz_id,
+    quizName: r.quiz_name,
+    langA: r.lang_a,
+    langB: r.lang_b,
+  }));
+}
+
+/** Cambia una palabra de compartimento (tras responderla) y rellena el 1.º si ha quedado sitio. */
+export async function moveCard(boxId: number, pairId: number, compartment: number): Promise<void> {
+  await exec('UPDATE leitner_cards SET compartment = $1, moved_at = $2 WHERE box_id = $3 AND pair_id = $4', [
+    compartment,
+    now(),
+    boxId,
+    pairId,
+  ]);
+  await refillBox(boxId);
+}
+
+/** Fija el compartimento sin rellenar (para importar; después hay que llamar a syncBox). */
+export async function setCardCompartment(boxId: number, pairId: number, compartment: number): Promise<void> {
+  await exec('UPDATE leitner_cards SET compartment = $1 WHERE box_id = $2 AND pair_id = $3', [compartment, boxId, pairId]);
+}
+
+/** Saca una palabra de la caja (sigue en su cuestionario). */
+export async function excludePair(boxId: number, pairId: number): Promise<void> {
+  await exec('INSERT OR IGNORE INTO leitner_excluded_pairs (box_id, pair_id) VALUES ($1, $2)', [boxId, pairId]);
+  await exec('DELETE FROM leitner_cards WHERE box_id = $1 AND pair_id = $2', [boxId, pairId]);
+  await refillBox(boxId);
+}
+
+/** Número de cajas (de cualquier usuario) que incluyen el cuestionario. */
+export async function boxesUsingQuiz(quizId: number): Promise<number> {
+  const rows = await select<{ n: number }>('SELECT COUNT(*) AS n FROM leitner_box_quizzes WHERE quiz_id = $1', [quizId]);
+  return rows[0]?.n ?? 0;
+}
+
+/** Cuántas de estas palabras están en alguna caja, y en cuántas cajas. */
+export async function boxesUsingPairs(pairIds: number[]): Promise<{ pairs: number; boxes: number }> {
+  if (pairIds.length === 0) return { pairs: 0, boxes: 0 };
+  const rows = await select<{ pairs: number; boxes: number }>(
+    `SELECT COUNT(DISTINCT pair_id) AS pairs, COUNT(DISTINCT box_id) AS boxes FROM leitner_cards
+     WHERE pair_id IN (${idList(pairIds, 0)})`,
+    pairIds
+  );
+  return { pairs: rows[0]?.pairs ?? 0, boxes: rows[0]?.boxes ?? 0 };
+}
+
+interface LeitnerSessionRow {
+  id: number;
+  user_id: number;
+  box_id: number | null;
+  box_name: string;
+  started_at: string;
+  finished_at: string;
+  duration_ms: number;
+  correct: number;
+  errors: number;
+  abandoned: number;
+}
+
+export async function saveLeitnerSession(s: Omit<LeitnerSessionRecord, 'id'>): Promise<number> {
+  return insert(
+    `INSERT INTO leitner_sessions (user_id, box_id, box_name, started_at, finished_at, duration_ms, correct, errors, abandoned)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [s.userId, s.boxId, s.boxName, s.startedAt, s.finishedAt, s.durationMs, s.correct, s.errors, s.abandoned ? 1 : 0]
+  );
+}
+
+export async function listLeitnerSessions(userId: number): Promise<LeitnerSessionRecord[]> {
+  const rows = await select<LeitnerSessionRow>(
+    'SELECT * FROM leitner_sessions WHERE user_id = $1 ORDER BY finished_at DESC',
+    [userId]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    userId: r.user_id,
+    boxId: r.box_id,
+    boxName: r.box_name,
+    startedAt: r.started_at,
+    finishedAt: r.finished_at,
+    durationMs: r.duration_ms,
+    correct: r.correct,
+    errors: r.errors,
+    abandoned: r.abandoned === 1,
+  }));
 }
 
 export async function dbPath(): Promise<string> {

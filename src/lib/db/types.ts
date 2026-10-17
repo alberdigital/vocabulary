@@ -16,6 +16,8 @@ export interface User {
 
 export interface UserPrefs {
   session?: SessionOptions;
+  /** Mostrar el cuestionario de la palabra durante la práctica de una caja (por defecto sí). */
+  leitnerShowQuiz?: boolean;
 }
 
 export interface Folder {
@@ -77,4 +79,49 @@ export interface QuizStats {
   sessions: number;
   bestMs: number | null;
   lastFirstRoundErrors: number | null;
+}
+
+// ---------- Cajas de Leitner ----------
+
+export interface LeitnerBox extends SessionOptions {
+  id: number;
+  userId: number;
+  name: string;
+  /** Capacidad del 1.er compartimento; el resto se calcula (ver leitner/core.ts). */
+  firstCapacity: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Palabra dentro de una caja, con lo necesario para preguntarla. */
+export interface LeitnerCard {
+  pairId: number;
+  /** 0 = pendiente, 1–5 = compartimentos, 6 = aprendida. */
+  compartment: number;
+  /** Orden de antigüedad dentro del compartimento (menor = más antigua). */
+  order: number;
+  a: string;
+  b: string;
+  quizId: number;
+  quizName: string;
+  langA: string;
+  langB: string;
+}
+
+export interface BoxSelection {
+  quizIds: number[];
+  excludedPairIds: number[];
+}
+
+export interface LeitnerSessionRecord {
+  id: number;
+  userId: number;
+  boxId: number | null;
+  boxName: string;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  correct: number;
+  errors: number;
+  abandoned: boolean;
 }

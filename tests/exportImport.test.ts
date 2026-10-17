@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { buildExport, importInto, parseExport, type QuizWithFolder } from '../src/lib/exportImport';
+import {
+  buildBoxExport,
+  buildExport,
+  importBoxInto,
+  importInto,
+  parseBoxExport,
+  parseExport,
+  type QuizWithFolder,
+} from '../src/lib/exportImport';
 import type { Folder } from '../src/lib/db/types';
 
 const folders: Folder[] = [
@@ -59,5 +67,73 @@ describe('exportar e importar', () => {
     expect(() =>
       parseExport('{"format":"vocabulario","version":1,"folders":[],"quizzes":[{"name":"x","langA":"en","langB":"es","pairs":[["a"]]}]}')
     ).toThrow();
+  });
+});
+
+describe('cajas de Leitner', () => {
+  const box = { name: 'Repaso', firstCapacity: 10, direction: 'BA' as const, answerMode: 'typed' as const, inputMode: 'handwriting' as const };
+  const file = buildBoxExport(box, [
+    {
+      name: 'Animales',
+      langA: 'en',
+      langB: 'es',
+      pairs: [
+        { a: 'dog', b: 'perro', compartment: 3 },
+        { a: 'cat', b: 'gato', compartment: null },
+      ],
+    },
+    { name: 'Colores', langA: 'en', langB: 'es', pairs: [{ a: 'red', b: 'rojo', compartment: 0 }] },
+  ]);
+
+  it('exporta los cuestionarios, los compartimentos y las excluidas', () => {
+    expect(file.quizzes.map((q) => q.pairs)).toEqual([[['dog', 'perro'], ['cat', 'gato']], [['red', 'rojo']]]);
+    expect(file.cards).toEqual([
+      [0, 0, 3],
+      [1, 0, 0],
+    ]);
+    expect(file.excluded).toEqual([[0, 1]]);
+    expect(parseBoxExport(JSON.stringify(file))).toEqual(file);
+  });
+
+  it('rechaza ficheros cruzados o con índices imposibles', () => {
+    expect(() => parseBoxExport(JSON.stringify(buildExport(folders, quizzes, null)))).toThrow(/Cuestionarios/);
+    expect(() => parseExport(JSON.stringify(file))).toThrow(/Cajas de Leitner/);
+    expect(() => parseBoxExport(JSON.stringify({ ...file, cards: [[5, 0, 1]] }))).toThrow(/formato/);
+    expect(() => parseBoxExport(JSON.stringify({ ...file, cards: [[0, 0, 7]] }))).toThrow(/formato/);
+  });
+
+  it('importa en una carpeta nueva y recrea el progreso', async () => {
+    let next = 1;
+    const calls: string[] = [];
+    const pairs = new Map<number, number[]>();
+    const compartments = new Map<number, number>();
+    let created: { quizIds: number[]; excluded: number[] } | null = null;
+    await importBoxInto(file, {
+      createFolder: async (name) => {
+        calls.push(`folder ${name}`);
+        return next++;
+      },
+      createQuiz: async (name, folderId, _a, _b, ps) => {
+        calls.push(`quiz ${name} in ${folderId}`);
+        const id = next++;
+        pairs.set(id, ps.map(() => next++));
+        return id;
+      },
+      pairIds: async (id) => pairs.get(id)!,
+      createBox: async (b, quizIds, excluded) => {
+        expect(b).toEqual(box);
+        created = { quizIds, excluded };
+        return 99;
+      },
+      setCompartment: async (_box, pairId, c) => {
+        compartments.set(pairId, c);
+      },
+    });
+    expect(calls).toEqual(['folder Repaso', 'quiz Animales in 1', 'quiz Colores in 1']);
+    expect(created).toEqual({ quizIds: [2, 5], excluded: [4] });
+    expect([...compartments]).toEqual([
+      [3, 3],
+      [6, 0],
+    ]);
   });
 });

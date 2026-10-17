@@ -9,10 +9,23 @@ import libRs from '../../../src-tauri/src/lib.rs?raw';
 
 const STORAGE_KEY = 'vocabulario-dev-db';
 
-function migrationSql(): string {
-  const m = libRs.match(/sql: r#"([\s\S]*?)"#/);
-  if (!m) throw new Error('No se encontró la migración en lib.rs');
-  return m[1];
+/** SQL de las migraciones de lib.rs, en orden (la primera es la versión 1). */
+function migrations(): string[] {
+  const out = [...libRs.matchAll(/sql: r#"([\s\S]*?)"#/g)].map((m) => m[1]);
+  if (out.length === 0) throw new Error('No se encontraron migraciones en lib.rs');
+  return out;
+}
+
+/** Aplica las migraciones pendientes, llevando la cuenta en PRAGMA user_version. */
+function migrate(db: Database): boolean {
+  let version = Number(db.exec('PRAGMA user_version')[0]?.values[0][0] ?? 0);
+  // Las bases guardadas antes de llevar la cuenta ya tienen la migración 1.
+  if (version === 0 && db.exec("SELECT 1 FROM sqlite_master WHERE name = 'users'").length > 0) version = 1;
+  const all = migrations();
+  if (version >= all.length) return false;
+  for (let v = version; v < all.length; v++) db.exec(all[v]);
+  db.exec(`PRAGMA user_version = ${all.length}`);
+  return true;
 }
 
 function persist(db: Database) {
@@ -46,10 +59,7 @@ export async function install(): Promise<void> {
   const saved = restore();
   const db = saved ? new SQL.Database(saved) : new SQL.Database();
   db.run('PRAGMA foreign_keys = ON');
-  if (!saved) {
-    db.exec(migrationSql());
-    persist(db);
-  }
+  if (migrate(db)) persist(db);
   const files = new Map<string, string>();
 
   mockIPC((cmd, payload) => {

@@ -5,7 +5,8 @@ Aplicación de escritorio para aprender vocabulario con cuestionarios de pares d
 - Pregunta las palabras en orden aleatorio y repite las falladas al final, en nuevas rondas, hasta acertarlas todas.
 - Al terminar muestra el tiempo, los errores de la primera vuelta y los errores totales. El historial se guarda por usuario.
 - Modos: sentido A→B o B→A; respuesta escrita (con teclado o a mano) o autoevaluación.
-- Biblioteca con carpetas anidadas, compartida por todos los usuarios. Exportación e importación en JSON.
+- Cuestionarios en carpetas anidadas, compartidos por todos los usuarios. Exportación e importación en JSON.
+- Cajas de Leitner por usuario, con palabras elegidas de cualquier cuestionario (ver más abajo).
 - Escritura a mano reconocida en local con [TrOCR-small-handwritten](https://huggingface.co/Xenova/trocr-small-handwritten) (incluido en la aplicación; no hace falta conexión).
 
 ## Reglas de corrección
@@ -14,6 +15,15 @@ Aplicación de escritorio para aprender vocabulario con cuestionarios de pares d
 - **Aclaraciones:** lo que va entre paréntesis (`bank (of a river)`) se muestra al preguntar, pero no hace falta escribirlo.
 - **A mano:** no se comprueban tildes ni la diferencia ñ/n. Si la IA lee mal una respuesta correcta, el botón «La IA se equivocó» (tecla <kbd>C</kbd>) la da por buena.
 - **Autoevaluación:** <kbd>Espacio</kbd>/<kbd>Intro</kbd> muestran la respuesta y, después, la dan por buena; <kbd>N</kbd> la da por mala.
+
+## Cajas de Leitner
+
+- Cada caja tiene 5 compartimentos con capacidades en la proporción clásica 1:2:5:8:14 a partir de la del 1.º (por defecto 20 → 20/40/100/160/280).
+- Se eligen carpetas, cuestionarios o palabras sueltas. Las palabras entran en el 1.º mientras quepan; el resto espera en «pendientes» y va entrando según hay sitio. Las palabras que se añadan después a un cuestionario marcado entran solas.
+- Una sesión repasa los compartimentos llenos, del 5.º al 1.º: del 1.º, todas sus palabras; de los demás, las más antiguas (lo que sobra más un lote del tamaño del 1.º). Si no hay ninguno lleno, se repasa el 1.º.
+- Acierto: la palabra sube un compartimento (desde el 5.º queda como aprendida). Fallo: vuelve al 1.º. Cada respuesta se guarda al momento, así que abandonar no pierde lo hecho.
+- Durante la práctica se puede quitar una palabra de la caja (sigue en su cuestionario) y ocultar de qué cuestionario es.
+- Al exportar una caja se incluyen sus cuestionarios y el progreso; al importarla, los cuestionarios se crean en una carpeta nueva.
 
 ## Requisitos (Linux Mint / Ubuntu)
 
@@ -37,12 +47,12 @@ Los datos se guardan en `~/.config/com.asantos.vocabulario/vocab.db` (la ruta ex
 ## Desarrollo
 
 ```bash
-npm test             # tests unitarios (corrección, motor de rondas, exportar/importar)
+npm test             # tests unitarios (corrección, motor de rondas, cajas de Leitner, exportar/importar)
 npm run check        # comprobación de tipos (svelte-check)
 npm run dev          # solo la interfaz, en un navegador normal en http://localhost:1420
 ```
 
-Con `npm run dev` en un navegador (sin Tauri) se activa un simulador **solo de desarrollo** (`src/lib/db/devMock.ts`). Usa SQLite en WebAssembly con las mismas migraciones de `src-tauri/src/lib.rs` y guarda los datos en `localStorage`. No se incluye en la aplicación empaquetada.
+Con `npm run dev` en un navegador (sin Tauri) se activa un simulador **solo de desarrollo** (`src/lib/db/devMock.ts`). Usa SQLite en WebAssembly con las mismas migraciones de `src-tauri/src/lib.rs` y guarda los datos en `localStorage`. No se incluye en la aplicación empaquetada. Vite no vigila `src-tauri`: tras añadir una migración hay que reiniciar `npm run dev`.
 
 Prueba manual del reconocimiento con imágenes (`<fuente>_<palabra>.png`):
 
@@ -57,7 +67,9 @@ Los umbrales de aceptación (`MARGIN`, `MIN_SCORE`) están en `src/lib/handwriti
 | Ruta | Contenido |
 |---|---|
 | `src/lib/quiz/` | Corrección de respuestas, motor de rondas, lista de idiomas |
+| `src/lib/leitner/` | Reglas de las cajas de Leitner (capacidades, qué se repasa, movimientos) |
+| `src/lib/components/` | Sesión de práctica común, árbol de carpetas, selector de contenido y dibujo de las cajas |
 | `src/lib/db/` | Acceso a SQLite (`repo.ts` concentra todo el SQL) |
 | `src/lib/handwriting/` | Lienzo, Web Worker y lógica de reconocimiento |
-| `src/routes/` | Pantallas: usuarios, biblioteca, editor, práctica, resultados, historial |
+| `src/routes/` | Pantallas: usuarios, cuestionarios, cajas de Leitner, editores, práctica, resultados, historial |
 | `src-tauri/src/lib.rs` | Migraciones de la base de datos y comandos para leer y escribir ficheros de exportación |
