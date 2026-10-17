@@ -3,7 +3,7 @@
 // las escrituras de varias filas se hacen con un único INSERT de varias filas.
 
 import { fisherYates } from '$lib/quiz/engine';
-import { LEARNED, refillCount } from '$lib/leitner/core';
+import { PENDING, refill, type CardRef } from '$lib/leitner/core';
 import { db } from './client';
 import type {
   AnswerRecord,
@@ -11,7 +11,7 @@ import type {
   Folder,
   LeitnerBox,
   LeitnerCard,
-  LeitnerSessionRecord,
+  LeitnerPracticeRecord,
   Quiz,
   QuizStats,
   QuizSummary,
@@ -553,45 +553,52 @@ export async function syncBox(boxId: number): Promise<void> {
        AND p.id NOT IN (SELECT pair_id FROM leitner_excluded_pairs WHERE box_id = $1)`,
     [boxId]
   );
-  const t = now();
-  await insertRows(
-    'leitner_cards',
-    ['box_id', 'pair_id', 'compartment', 'moved_at'],
-    fisherYates(missing).map((r) => [boxId, r.id, 0, t])
-  );
+  if (missing.length > 0) {
+    const rows = await select<{ seq: number | null }>('SELECT MAX(seq) AS seq FROM leitner_cards WHERE box_id = $1', [
+      boxId,
+    ]);
+    const last = rows[0]?.seq ?? 0;
+    await insertRows(
+      'leitner_cards',
+      ['box_id', 'pair_id', 'compartment', 'seq'],
+      fisherYates(missing).map((r, i) => [boxId, r.id, PENDING, last + i + 1])
+    );
+  }
   await refillBox(boxId);
 }
 
-/** Pasa al 1.er compartimento las pendientes más antiguas que quepan. */
+/** Rellena el 1.er compartimento con las reglas de leitner/core.ts y guarda lo que cambie. */
 async function refillBox(boxId: number): Promise<void> {
   const box = await getBox(boxId);
   if (!box) return;
-  const counts = await boxCounts(boxId);
-  const n = refillCount(counts[1], counts[0], box.firstCapacity);
-  if (n === 0) return;
-  await exec(
-    `UPDATE leitner_cards SET compartment = 1, moved_at = $2 WHERE box_id = $1 AND pair_id IN (
-       SELECT pair_id FROM leitner_cards WHERE box_id = $1 AND compartment = 0 ORDER BY moved_at, rowid LIMIT $3)`,
-    [boxId, now(), n]
-  );
-}
-
-/** Palabras por compartimento: [pendientes, c1…c5, aprendidas]. */
-export async function boxCounts(boxId: number): Promise<number[]> {
-  const rows = await select<{ compartment: number; n: number }>(
-    'SELECT compartment, COUNT(*) AS n FROM leitner_cards WHERE box_id = $1 GROUP BY compartment',
+  const rows = await select<{ pair_id: number; compartment: number; seq: number }>(
+    'SELECT pair_id, compartment, seq FROM leitner_cards WHERE box_id = $1',
     [boxId]
   );
-  const counts = new Array(LEARNED + 1).fill(0);
-  for (const r of rows) counts[r.compartment] = r.n;
-  return counts;
+  const cards = rows.map((r) => ({ pairId: r.pair_id, compartment: r.compartment, seq: r.seq }));
+  await saveCards(boxId, refill(cards, box.firstCapacity));
 }
 
-/** Todas las palabras de la caja, de la más antigua a la más reciente en su compartimento. */
+/** Guarda el compartimento y la antigüedad de estas palabras de la caja. */
+export async function saveCards(boxId: number, cards: CardRef[]): Promise<void> {
+  const CHUNK = 300;
+  for (let i = 0; i < cards.length; i += CHUNK) {
+    const chunk = cards.slice(i, i + CHUNK);
+    await exec(
+      `UPDATE leitner_cards SET compartment = v.column2, seq = v.column3
+       FROM (VALUES ${valuesPlaceholders(chunk.length, 3, 1)}) AS v
+       WHERE leitner_cards.box_id = $1 AND leitner_cards.pair_id = v.column1`,
+      [boxId, ...chunk.flatMap((c) => [c.pairId, c.compartment, c.seq])]
+    );
+  }
+}
+
+/** Todas las palabras de la caja, de la más antigua a la más reciente. */
 export async function boxCards(boxId: number): Promise<LeitnerCard[]> {
   const rows = await select<{
     pair_id: number;
     compartment: number;
+    seq: number;
     a: string;
     b: string;
     quiz_id: number;
@@ -599,15 +606,15 @@ export async function boxCards(boxId: number): Promise<LeitnerCard[]> {
     lang_a: string;
     lang_b: string;
   }>(
-    `SELECT c.pair_id, c.compartment, p.a, p.b, q.id AS quiz_id, q.name AS quiz_name, q.lang_a, q.lang_b
+    `SELECT c.pair_id, c.compartment, c.seq, p.a, p.b, q.id AS quiz_id, q.name AS quiz_name, q.lang_a, q.lang_b
      FROM leitner_cards c JOIN pairs p ON p.id = c.pair_id JOIN quizzes q ON q.id = p.quiz_id
-     WHERE c.box_id = $1 ORDER BY c.moved_at, c.rowid`,
+     WHERE c.box_id = $1 ORDER BY c.seq`,
     [boxId]
   );
-  return rows.map((r, i) => ({
+  return rows.map((r) => ({
     pairId: r.pair_id,
     compartment: r.compartment,
-    order: i,
+    seq: r.seq,
     a: r.a,
     b: r.b,
     quizId: r.quiz_id,
@@ -617,27 +624,13 @@ export async function boxCards(boxId: number): Promise<LeitnerCard[]> {
   }));
 }
 
-/** Cambia una palabra de compartimento (tras responderla) y rellena el 1.º si ha quedado sitio. */
-export async function moveCard(boxId: number, pairId: number, compartment: number): Promise<void> {
-  await exec('UPDATE leitner_cards SET compartment = $1, moved_at = $2 WHERE box_id = $3 AND pair_id = $4', [
-    compartment,
-    now(),
-    boxId,
-    pairId,
-  ]);
-  await refillBox(boxId);
-}
-
-/** Fija el compartimento sin rellenar (para importar; después hay que llamar a syncBox). */
-export async function setCardCompartment(boxId: number, pairId: number, compartment: number): Promise<void> {
-  await exec('UPDATE leitner_cards SET compartment = $1 WHERE box_id = $2 AND pair_id = $3', [compartment, boxId, pairId]);
-}
-
-/** Saca una palabra de la caja (sigue en su cuestionario). */
+/**
+ * Saca una palabra de la caja (sigue en su cuestionario). No rellena el 1.º: lo hace quien la
+ * saca (el motor de la práctica) y guarda el resultado con saveCards.
+ */
 export async function excludePair(boxId: number, pairId: number): Promise<void> {
   await exec('INSERT OR IGNORE INTO leitner_excluded_pairs (box_id, pair_id) VALUES ($1, $2)', [boxId, pairId]);
   await exec('DELETE FROM leitner_cards WHERE box_id = $1 AND pair_id = $2', [boxId, pairId]);
-  await refillBox(boxId);
 }
 
 /** Número de cajas (de cualquier usuario) que incluyen el cuestionario. */
@@ -657,7 +650,7 @@ export async function boxesUsingPairs(pairIds: number[]): Promise<{ pairs: numbe
   return { pairs: rows[0]?.pairs ?? 0, boxes: rows[0]?.boxes ?? 0 };
 }
 
-interface LeitnerSessionRow {
+interface LeitnerPracticeRow {
   id: number;
   user_id: number;
   box_id: number | null;
@@ -667,19 +660,32 @@ interface LeitnerSessionRow {
   duration_ms: number;
   correct: number;
   errors: number;
-  abandoned: number;
 }
 
-export async function saveLeitnerSession(s: Omit<LeitnerSessionRecord, 'id'>): Promise<number> {
+export type PracticeProgress = Pick<LeitnerPracticeRecord, 'finishedAt' | 'durationMs' | 'correct' | 'errors'>;
+
+/** Crea el registro de una práctica (con la primera respuesta). */
+export async function startLeitnerPractice(p: Omit<LeitnerPracticeRecord, 'id'>): Promise<number> {
   return insert(
-    `INSERT INTO leitner_sessions (user_id, box_id, box_name, started_at, finished_at, duration_ms, correct, errors, abandoned)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    [s.userId, s.boxId, s.boxName, s.startedAt, s.finishedAt, s.durationMs, s.correct, s.errors, s.abandoned ? 1 : 0]
+    `INSERT INTO leitner_sessions (user_id, box_id, box_name, started_at, finished_at, duration_ms, correct, errors)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [p.userId, p.boxId, p.boxName, p.startedAt, p.finishedAt, p.durationMs, p.correct, p.errors]
   );
 }
 
-export async function listLeitnerSessions(userId: number): Promise<LeitnerSessionRecord[]> {
-  const rows = await select<LeitnerSessionRow>(
+/** Actualiza el registro de una práctica tras cada respuesta. */
+export async function updateLeitnerPractice(id: number, p: PracticeProgress): Promise<void> {
+  await exec('UPDATE leitner_sessions SET finished_at = $1, duration_ms = $2, correct = $3, errors = $4 WHERE id = $5', [
+    p.finishedAt,
+    p.durationMs,
+    p.correct,
+    p.errors,
+    id,
+  ]);
+}
+
+export async function listLeitnerPractices(userId: number): Promise<LeitnerPracticeRecord[]> {
+  const rows = await select<LeitnerPracticeRow>(
     'SELECT * FROM leitner_sessions WHERE user_id = $1 ORDER BY finished_at DESC',
     [userId]
   );
@@ -693,7 +699,6 @@ export async function listLeitnerSessions(userId: number): Promise<LeitnerSessio
     durationMs: r.duration_ms,
     correct: r.correct,
     errors: r.errors,
-    abandoned: r.abandoned === 1,
   }));
 }
 

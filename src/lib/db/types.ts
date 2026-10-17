@@ -98,8 +98,8 @@ export interface LeitnerCard {
   pairId: number;
   /** 0 = pendiente, 1–5 = compartimentos, 6 = aprendida. */
   compartment: number;
-  /** Orden de antigüedad dentro del compartimento (menor = más antigua). */
-  order: number;
+  /** Antigüedad dentro de la caja (menor = más antigua); cambia cada vez que la palabra se mueve. */
+  seq: number;
   a: string;
   b: string;
   quizId: number;
@@ -113,7 +113,8 @@ export interface BoxSelection {
   excludedPairIds: number[];
 }
 
-export interface LeitnerSessionRecord {
+/** Una práctica de una caja: desde que se empieza hasta la última respuesta. */
+export interface LeitnerPracticeRecord {
   id: number;
   userId: number;
   boxId: number | null;
@@ -123,5 +124,4 @@ export interface LeitnerSessionRecord {
   durationMs: number;
   correct: number;
   errors: number;
-  abandoned: boolean;
 }

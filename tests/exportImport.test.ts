@@ -78,18 +78,18 @@ describe('cajas de Leitner', () => {
       langA: 'en',
       langB: 'es',
       pairs: [
-        { a: 'dog', b: 'perro', compartment: 3 },
-        { a: 'cat', b: 'gato', compartment: null },
+        { a: 'dog', b: 'perro', compartment: 3, seq: 7 },
+        { a: 'cat', b: 'gato', compartment: null, seq: 0 },
       ],
     },
-    { name: 'Colores', langA: 'en', langB: 'es', pairs: [{ a: 'red', b: 'rojo', compartment: 0 }] },
+    { name: 'Colores', langA: 'en', langB: 'es', pairs: [{ a: 'red', b: 'rojo', compartment: 0, seq: 2 }] },
   ]);
 
-  it('exporta los cuestionarios, los compartimentos y las excluidas', () => {
+  it('exporta los cuestionarios, los compartimentos (de la más antigua a la más reciente) y las excluidas', () => {
     expect(file.quizzes.map((q) => q.pairs)).toEqual([[['dog', 'perro'], ['cat', 'gato']], [['red', 'rojo']]]);
     expect(file.cards).toEqual([
-      [0, 0, 3],
       [1, 0, 0],
+      [0, 0, 3],
     ]);
     expect(file.excluded).toEqual([[0, 1]]);
     expect(parseBoxExport(JSON.stringify(file))).toEqual(file);
@@ -106,7 +106,7 @@ describe('cajas de Leitner', () => {
     let next = 1;
     const calls: string[] = [];
     const pairs = new Map<number, number[]>();
-    const compartments = new Map<number, number>();
+    let saved: { pairId: number; compartment: number; seq: number }[] = [];
     let created: { quizIds: number[]; excluded: number[] } | null = null;
     await importBoxInto(file, {
       createFolder: async (name) => {
@@ -125,15 +125,15 @@ describe('cajas de Leitner', () => {
         created = { quizIds, excluded };
         return 99;
       },
-      setCompartment: async (_box, pairId, c) => {
-        compartments.set(pairId, c);
+      setCards: async (_box, cards) => {
+        saved = cards;
       },
     });
     expect(calls).toEqual(['folder Repaso', 'quiz Animales in 1', 'quiz Colores in 1']);
     expect(created).toEqual({ quizIds: [2, 5], excluded: [4] });
-    expect([...compartments]).toEqual([
-      [3, 3],
-      [6, 0],
+    expect(saved).toEqual([
+      { pairId: 6, compartment: 0, seq: 1 },
+      { pairId: 3, compartment: 3, seq: 2 },
     ]);
   });
 });

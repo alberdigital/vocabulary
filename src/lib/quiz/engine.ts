@@ -26,7 +26,8 @@ export interface PracticeEngine<T> {
   readonly current: T | undefined;
   readonly finished: boolean;
   readonly round: number;
-  readonly roundSize: number;
+  /** Preguntas de la ronda actual; null si la práctica no tiene un número fijo de preguntas. */
+  readonly roundSize: number | null;
   readonly roundDone: number;
   readonly totalErrors: number;
   answer(correct: boolean, given?: string | null, elapsedMs?: number): void;

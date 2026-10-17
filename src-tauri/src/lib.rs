@@ -131,6 +131,25 @@ CREATE INDEX idx_leitner_cards_box ON leitner_cards(box_id, compartment);
 CREATE INDEX idx_leitner_sessions_user ON leitner_sessions(user_id, finished_at);
 "#,
         },
+        Migration {
+            version: 3,
+            description: "antigüedad explícita en las cajas de Leitner",
+            kind: MigrationKind::Up,
+            sql: r#"
+-- seq: antigüedad dentro de la caja (menor = más antigua); sustituye a moved_at.
+ALTER TABLE leitner_cards ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
+UPDATE leitner_cards SET seq = (
+  SELECT COUNT(*) FROM leitner_cards c
+  WHERE c.box_id = leitner_cards.box_id
+    AND (c.moved_at < leitner_cards.moved_at OR (c.moved_at = leitner_cards.moved_at AND c.rowid <= leitner_cards.rowid))
+);
+ALTER TABLE leitner_cards DROP COLUMN moved_at;
+DROP INDEX idx_leitner_cards_box;
+CREATE INDEX idx_leitner_cards_box ON leitner_cards(box_id, compartment, seq);
+-- Las prácticas de una caja no se abandonan: se guardan a cada respuesta.
+ALTER TABLE leitner_sessions DROP COLUMN abandoned;
+"#,
+        },
     ]
 }
 

@@ -1,18 +1,18 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import * as repo from '$lib/db/repo';
-  import type { LeitnerSessionRecord, SessionRecord } from '$lib/db/types';
+  import type { LeitnerPracticeRecord, SessionRecord } from '$lib/db/types';
   import { app, formatDate, formatDuration } from '$lib/state.svelte';
 
   let sessions = $state<SessionRecord[]>([]);
-  let boxSessions = $state<LeitnerSessionRecord[]>([]);
+  let boxSessions = $state<LeitnerPracticeRecord[]>([]);
   let filter = $state('');
 
   $effect(() => {
     const user = app.user;
     if (!user) return;
     repo.listSessions(user.id).then((s) => (sessions = s));
-    repo.listLeitnerSessions(user.id).then((s) => (boxSessions = s));
+    repo.listLeitnerPractices(user.id).then((s) => (boxSessions = s));
   });
 
   /** Cuestionarios presentes en el historial (por nombre guardado, por si se han borrado). */
@@ -89,7 +89,6 @@
           <td>{formatDate(s.finishedAt)}</td>
           <td>
             {s.boxName}{#if s.boxId === null}<span class="muted"> (borrada)</span>{/if}
-            {#if s.abandoned}<span class="muted"> · abandonada</span>{/if}
           </td>
           <td class="num">{s.correct}</td>
           <td class="num">{s.errors}</td>

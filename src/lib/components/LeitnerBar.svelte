@@ -69,7 +69,8 @@
   .comp {
     position: relative;
     flex-basis: 0;
-    min-width: 3.8rem;
+    /* Sin mínimo fijo: el ancho es proporcional a la capacidad mientras quepa el número. */
+    padding: 0 0.15rem;
     height: 2.2rem;
     display: grid;
     place-items: center;
@@ -91,7 +92,8 @@
   }
   .num {
     position: relative;
-    font-size: 0.82rem;
+    font-size: 0.72rem;
+    white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
   .hl {

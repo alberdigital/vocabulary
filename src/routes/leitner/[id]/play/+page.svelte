@@ -5,110 +5,122 @@
   import PracticeSession from '$lib/components/PracticeSession.svelte';
   import * as repo from '$lib/db/repo';
   import type { LeitnerBox, LeitnerCard } from '$lib/db/types';
-  import { confirmDanger, showError } from '$lib/dialogs.svelte';
-  import { countByCompartment, LeitnerEngine, nextCompartment, pickSession } from '$lib/leitner/core';
+  import { showError } from '$lib/dialogs.svelte';
+  import { LeitnerEngine } from '$lib/leitner/core';
   import { app, formatDuration } from '$lib/state.svelte';
 
   const boxId = $derived(Number(page.params.id));
 
   let box = $state<LeitnerBox | null>(null);
   let counts = $state<number[]>([0, 0, 0, 0, 0, 0, 0]);
-  /** Palabras que preguntaría una sesión ahora. */
-  let due = $state<LeitnerCard[]>([]);
-  let engine = $state<LeitnerEngine<LeitnerCard> | null>(null);
+  let engine = $state.raw<LeitnerEngine<LeitnerCard> | null>(null);
+  /** true mientras se pregunta; false en la pantalla final. */
+  let practicing = $state(false);
   let startedAt = $state(0);
-  let result = $state<{ correct: number; errors: number; durationMs: number } | null>(null);
+  /** Momento de la última respuesta: la práctica dura hasta ahí. */
+  let lastAnswerAt = 0;
+  let result = $state<{ answered: number; correct: number; errors: number; durationMs: number } | null>(null);
+  let exhausted = $state(false);
   let showQuiz = $state(true);
-  /** Escrituras en curso, en orden, para no guardar la sesión antes de que terminen. */
+  /** Guarda el registro de la práctica en curso (ver progressSaver). */
+  let saveProgress: ((p: repo.PracticeProgress) => Promise<void>) | null = null;
+  /** Escrituras en curso, en orden: cada respuesta se guarda al momento. */
   let writes: Promise<unknown> = Promise.resolve();
 
-  async function load(id: number) {
+  /** Carga la caja y empieza a preguntar (o muestra el cartel si no hay nada que preguntar). */
+  async function start(id: number) {
+    await writes;
     const b = await repo.getBox(id);
     if (!b || b.userId !== app.user?.id) return goto('/leitner');
     await repo.syncBox(id);
-    const cards = await repo.boxCards(id);
+    const e = new LeitnerEngine(await repo.boxCards(id), b.firstCapacity);
     box = b;
-    counts = countByCompartment(cards);
-    due = pickSession(cards, b.firstCapacity);
+    engine = e;
+    counts = e.counts();
+    result = null;
+    saveProgress = null;
+    exhausted = e.finished;
+    practicing = !e.finished;
+    startedAt = lastAnswerAt = Date.now();
   }
 
   $effect(() => {
     const id = boxId;
-    load(id).catch(showError);
+    start(id).catch(showError);
     if (app.user) repo.getUserPrefs(app.user.id).then((p) => (showQuiz = p.leitnerShowQuiz ?? true));
   });
 
-  function start() {
-    if (!box || due.length === 0) return;
-    result = null;
-    startedAt = Date.now();
-    engine = new LeitnerEngine(due);
+  /** Registro de la práctica en el historial: se crea con la primera respuesta y se actualiza con cada una. */
+  function progressSaver(b: LeitnerBox, userId: number, start: number) {
+    let id: number | null = null;
+    return async (p: repo.PracticeProgress) => {
+      if (id === null)
+        id = await repo.startLeitnerPractice({
+          userId,
+          boxId: b.id,
+          boxName: b.name,
+          startedAt: new Date(start).toISOString(),
+          ...p,
+        });
+      else await repo.updateLeitnerPractice(id, p);
+    };
   }
 
-  /** Encadena una escritura y refresca los contadores al terminar. */
-  function write(fn: () => Promise<unknown>) {
+  /** Guarda lo que ha cambiado en el motor (y, si hace falta, antes otra escritura) y el registro de la práctica. */
+  function persist(before?: () => Promise<void>) {
+    const e = engine;
+    if (!e || !box || !app.user) return;
+    if (!saveProgress) saveProgress = progressSaver(box, app.user.id, startedAt);
+    const save = saveProgress;
     const id = boxId;
+    const changes = e.takeChanges();
+    const progress: repo.PracticeProgress = {
+      finishedAt: new Date(lastAnswerAt).toISOString(),
+      durationMs: lastAnswerAt - startedAt,
+      correct: e.correctCount,
+      errors: e.totalErrors,
+    };
+    const answered = e.answers.length > 0;
+    counts = e.counts();
     writes = writes
-      .then(fn)
-      .then(() => repo.boxCounts(id))
-      .then((c) => (counts = c))
+      .then(async () => {
+        await before?.();
+        await repo.saveCards(id, changes);
+        if (answered) await save(progress);
+      })
       .catch(showError);
   }
 
-  function onanswered(card: LeitnerCard, correct: boolean) {
-    write(() => repo.moveCard(boxId, card.pairId, nextCompartment(card.compartment, correct)));
+  function onanswered() {
+    lastAnswerAt = Date.now();
+    persist();
   }
 
-  function onoverride(card: LeitnerCard) {
-    write(() => repo.moveCard(boxId, card.pairId, nextCompartment(card.compartment, true)));
+  function onoverride() {
+    persist();
   }
 
   function removeFromBox(card: LeitnerCard, remove: () => void) {
-    write(() => repo.excludePair(boxId, card.pairId));
+    engine?.removeCard(card.pairId);
+    persist(() => repo.excludePair(boxId, card.pairId));
     remove();
   }
 
-  async function saveSession(abandoned: boolean) {
-    await writes;
-    if (!engine || !box || !app.user) return;
-    const finishedAt = new Date();
-    const durationMs = finishedAt.getTime() - startedAt;
-    const r = { correct: engine.correctCount, errors: engine.totalErrors, durationMs };
-    if (engine.answers.length > 0)
-      await repo.saveLeitnerSession({
-        userId: app.user.id,
-        boxId: box.id,
-        boxName: box.name,
-        startedAt: new Date(startedAt).toISOString(),
-        finishedAt: finishedAt.toISOString(),
-        durationMs,
-        correct: r.correct,
-        errors: r.errors,
-        abandoned,
-      });
-    return r;
+  /** Pantalla final: al pulsar «Terminar» o cuando no queda nada que preguntar. */
+  function end() {
+    const e = engine;
+    if (!e) return;
+    practicing = false;
+    exhausted = e.finished;
+    saveProgress = null;
+    result =
+      e.answers.length > 0
+        ? { answered: e.answers.length, correct: e.correctCount, errors: e.totalErrors, durationMs: lastAnswerAt - startedAt }
+        : null;
   }
 
-  async function finish() {
-    try {
-      const r = await saveSession(false);
-      engine = null;
-      result = r ?? null;
-      await load(boxId);
-    } catch (e) {
-      showError(e);
-    }
-  }
-
-  async function abandon() {
-    if (!(await confirmDanger('¿Abandonar la sesión? Lo respondido hasta ahora se conserva.', 'Abandonar'))) return;
-    try {
-      await saveSession(true);
-    } catch (e) {
-      showError(e);
-    }
-    engine = null;
-    goto('/leitner');
+  function again() {
+    start(boxId).catch(showError);
   }
 
   async function toggleQuiz() {
@@ -120,15 +132,10 @@
   }
 
   function onKey(e: KeyboardEvent) {
-    if (!engine && e.key === 'Enter' && !e.repeat && due.length > 0) {
+    if (!practicing && box && !exhausted && e.key === 'Enter' && !e.repeat) {
       e.preventDefault();
-      start();
+      again();
     }
-  }
-
-  function mode(b: LeitnerBox): string {
-    if (b.answerMode === 'self') return 'autoevaluación';
-    return b.inputMode === 'handwriting' ? 'escrita a mano' : 'escrita con teclado';
   }
 
   /** Evita que los botones se queden con el foco (si no, Espacio/Intro los pulsaría además del atajo). */
@@ -137,18 +144,18 @@
 
 <svelte:window onkeydown={onKey} />
 
-{#if box && engine}
+{#if box && engine && practicing}
   <PracticeSession
     title={box.name}
     opts={box}
     {engine}
     {startedAt}
-    showRound={false}
+    stopLabel="Terminar"
     toItem={(c) => c}
     {onanswered}
     {onoverride}
-    onfinish={finish}
-    onabandon={abandon}
+    onfinish={end}
+    onstop={end}
   >
     {#snippet top(card)}
       <div class="bar-wrap">
@@ -179,33 +186,37 @@
       </button>
     {/snippet}
   </PracticeSession>
-{:else if box}
+{:else if box && engine}
   <div class="wrap">
     <div class="card panel">
       <button class="link back" onclick={() => goto('/leitner')}>← Cajas de Leitner</button>
+      <h1>{result ? 'Práctica terminada' : box.name}</h1>
       {#if result}
-        <h1>Sesión terminada</h1>
         <p class="muted">{box.name}</p>
         <div class="stats">
+          <div class="stat"><div class="value">{result.answered}</div><div class="label">Respondidas</div></div>
           <div class="stat"><div class="value ok">{result.correct}</div><div class="label">Aciertos</div></div>
           <div class="stat"><div class="value" class:bad={result.errors > 0}>{result.errors}</div><div class="label">Fallos</div></div>
           <div class="stat"><div class="value">{formatDuration(result.durationMs)}</div><div class="label">Tiempo</div></div>
         </div>
-      {:else}
-        <h1>{box.name}</h1>
-        <p class="muted">Respuesta {mode(box)} · {box.direction === 'AB' ? 'A→B' : 'B→A'}</p>
       {/if}
 
       <LeitnerBar {counts} firstCapacity={box.firstCapacity} />
 
-      {#if due.length > 0}
-        <p>Toca repasar <strong>{due.length}</strong> palabra{due.length === 1 ? '' : 's'}.</p>
-        <button class="primary big" onclick={start}>{result ? 'Seguir practicando' : 'Empezar'} <kbd>Intro</kbd></button>
+      {#if exhausted}
+        <p class="notice">
+          No queda nada que preguntar: el 1.<sup>er</sup> compartimento está vacío y ningún otro está lleno.
+          <strong>Añade más palabras para continuar.</strong>
+        </p>
+        <div class="row">
+          <button class="primary" onclick={() => goto(`/leitner/${box!.id}/edit`)}>Añadir palabras a la caja</button>
+          <button onclick={() => goto('/leitner')}>Volver a las cajas</button>
+        </div>
       {:else}
-        <p class="muted">No queda nada que repasar en esta caja.</p>
-      {/if}
-      {#if result}
-        <button onclick={() => goto('/leitner')}>Volver a las cajas</button>
+        <div class="row">
+          <button class="primary big" onclick={again}>Seguir practicando <kbd>Intro</kbd></button>
+          <button onclick={() => goto('/leitner')}>Volver a las cajas</button>
+        </div>
       {/if}
     </div>
   </div>
@@ -237,7 +248,7 @@
   }
   .stats {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 0.75rem;
   }
   .stat {
@@ -259,6 +270,11 @@
   }
   .label {
     font-size: 0.9rem;
+  }
+  .notice {
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius);
+    background: var(--surface-2);
   }
   .bar-wrap {
     padding: 0.6rem 1rem 0;

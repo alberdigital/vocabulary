@@ -174,7 +174,7 @@
     {startedAt}
     toItem={(p) => ({ a: p.a, b: p.b, langA: quiz!.langA, langB: quiz!.langB })}
     onfinish={finish}
-    onabandon={abandon}
+    onstop={abandon}
   />
 {/if}
 

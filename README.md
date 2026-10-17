@@ -20,8 +20,10 @@ Aplicación de escritorio para aprender vocabulario con cuestionarios de pares d
 
 - Cada caja tiene 5 compartimentos con capacidades en la proporción clásica 1:2:5:8:14 a partir de la del 1.º (por defecto 20 → 20/40/100/160/280).
 - Se eligen carpetas, cuestionarios o palabras sueltas. Las palabras entran en el 1.º mientras quepan; el resto espera en «pendientes» y va entrando según hay sitio. Las palabras que se añadan después a un cuestionario marcado entran solas.
-- Una sesión repasa los compartimentos llenos, del 5.º al 1.º: del 1.º, todas sus palabras; de los demás, las más antiguas (lo que sobra más un lote del tamaño del 1.º). Si no hay ninguno lleno, se repasa el 1.º.
-- Acierto: la palabra sube un compartimento (desde el 5.º queda como aprendida). Fallo: vuelve al 1.º. Cada respuesta se guarda al momento, así que abandonar no pierde lo hecho.
+- No hay sesiones: tras cada respuesta se elige la siguiente palabra. Se revisan los compartimentos del 5.º al 2.º y, si alguno ha alcanzado su capacidad, se pregunta su palabra más antigua (así ninguno la supera). Si no hay ninguno lleno, se pregunta la más antigua del 1.º, esté lleno o no.
+- Acierto: la palabra sube un compartimento (desde el 5.º queda como aprendida). Fallo: vuelve al 1.º como la más reciente, así que se vuelve a preguntar después de las demás del 1.º.
+- Si el 1.º se queda vacío y ningún otro está lleno, no hay nada que preguntar hasta que se añadan palabras.
+- Cada respuesta se guarda al momento, y el historial guarda un registro por práctica (desde «Practicar» hasta «Terminar»).
 - Durante la práctica se puede quitar una palabra de la caja (sigue en su cuestionario) y ocultar de qué cuestionario es.
 - Al exportar una caja se incluyen sus cuestionarios y el progreso; al importarla, los cuestionarios se crean en una carpeta nueva.
 
@@ -67,7 +69,7 @@ Los umbrales de aceptación (`MARGIN`, `MIN_SCORE`) están en `src/lib/handwriti
 | Ruta | Contenido |
 |---|---|
 | `src/lib/quiz/` | Corrección de respuestas, motor de rondas, lista de idiomas |
-| `src/lib/leitner/` | Reglas de las cajas de Leitner (capacidades, qué se repasa, movimientos) |
+| `src/lib/leitner/` | Reglas de las cajas de Leitner (capacidades, siguiente palabra, movimientos, relleno) |
 | `src/lib/components/` | Sesión de práctica común, árbol de carpetas, selector de contenido y dibujo de las cajas |
 | `src/lib/db/` | Acceso a SQLite (`repo.ts` concentra todo el SQL) |
 | `src/lib/handwriting/` | Lienzo, Web Worker y lógica de reconocimiento |

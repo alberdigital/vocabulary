@@ -30,11 +30,11 @@
     engine,
     startedAt,
     toItem,
-    showRound = true,
+    stopLabel = 'Abandonar',
     onanswered,
     onoverride,
     onfinish,
-    onabandon,
+    onstop,
     top,
     context,
     actions,
@@ -44,13 +44,15 @@
     engine: PracticeEngine<T> & { skip?(): void };
     startedAt: number;
     toItem: (t: T) => PracticeItem;
-    showRound?: boolean;
+    /** Botón para dejar de practicar. */
+    stopLabel?: string;
     /** Tras registrar una respuesta en el motor. */
     onanswered?: (item: T, correct: boolean) => void;
     /** Tras corregir como acierto la última respuesta («La IA se equivocó»). */
     onoverride?: (item: T) => void;
+    /** Cuando el motor no tiene nada más que preguntar. */
     onfinish: () => void;
-    onabandon: () => void;
+    onstop: () => void;
     /** Debajo de la barra de progreso. */
     top?: Snippet<[T | null]>;
     /** Debajo de la palabra preguntada. */
@@ -78,11 +80,15 @@
 
   /** Palabra en pantalla. No sigue al motor directamente: durante la corrección debe seguir mostrándose la contestada. */
   let current = $state<T | null>(null);
-  /** Ronda y posición de la palabra en pantalla (se fijan al mostrarla). */
-  let position = $state({ round: 1, index: 1, size: 1 });
+  /** Ronda y posición de la palabra en pantalla (se fijan al mostrarla); size null = sin número fijo. */
+  let position = $state<{ round: number; index: number; size: number | null }>({ round: 1, index: 1, size: 1 });
   const errors = $derived.by(() => {
     version;
     return engine.totalErrors;
+  });
+  const answered = $derived.by(() => {
+    version;
+    return engine.roundDone;
   });
   const item = $derived(current ? toItem(current) : null);
   const ab = $derived(opts.direction === 'AB');
@@ -261,15 +267,23 @@
     <header class="bar">
       <div class="row">
         <strong>{title}</strong>
-        <span class="muted">{showRound ? `Ronda ${position.round} · ` : ''}{position.index}/{position.size}</span>
+        <span class="muted">
+          {#if position.size === null}
+            {answered} respondida{answered === 1 ? '' : 's'}
+          {:else}
+            Ronda {position.round} · {position.index}/{position.size}
+          {/if}
+        </span>
         {#if errors > 0}<span class="errors">✗ {errors}</span>{/if}
       </div>
       <div class="row">
         <span class="clock">{formatDuration(now - startedAt)}</span>
-        <button onpointerdown={noFocus} onclick={onabandon}>Abandonar</button>
+        <button onpointerdown={noFocus} onclick={onstop}>{stopLabel}</button>
       </div>
     </header>
-    <div class="progressbar"><div style:width="{((position.index - 1) / position.size) * 100}%"></div></div>
+    {#if position.size !== null}
+      <div class="progressbar"><div style:width="{((position.index - 1) / position.size) * 100}%"></div></div>
+    {/if}
     {@render top?.(current)}
 
     <div class="stage">

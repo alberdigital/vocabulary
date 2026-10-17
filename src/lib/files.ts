@@ -66,7 +66,7 @@ export async function exportBox(boxId: number): Promise<boolean> {
   if (!box) return false;
   const sel = await repo.getBoxSelection(boxId);
   const excluded = new Set(sel.excludedPairIds);
-  const where = new Map((await repo.boxCards(boxId)).map((c) => [c.pairId, c.compartment]));
+  const where = new Map((await repo.boxCards(boxId)).map((c) => [c.pairId, c]));
   const quizzes = [];
   for (const id of sel.quizIds) {
     const q = await repo.getQuiz(id);
@@ -78,7 +78,8 @@ export async function exportBox(boxId: number): Promise<boolean> {
       pairs: q.pairs.map((p) => ({
         a: p.a,
         b: p.b,
-        compartment: excluded.has(p.id!) ? null : (where.get(p.id!) ?? 0),
+        compartment: excluded.has(p.id!) ? null : (where.get(p.id!)?.compartment ?? 0),
+        seq: where.get(p.id!)?.seq ?? 0,
       })),
     });
   }
@@ -100,7 +101,7 @@ export async function importBoxFile(userId: number): Promise<number | null> {
       await repo.setBoxSelection(id, { quizIds, excludedPairIds });
       return id;
     },
-    setCompartment: repo.setCardCompartment,
+    setCards: repo.saveCards,
   });
   await repo.syncBox(boxId);
   return boxId;

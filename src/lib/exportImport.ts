@@ -133,7 +133,10 @@ export interface BoxExportFile {
   version: 1;
   box: ExportBox;
   quizzes: ExportQuiz[];
-  /** [índice del cuestionario, índice del par, compartimento (0 = pendiente … 6 = aprendida)] */
+  /**
+   * [índice del cuestionario, índice del par, compartimento (0 = pendiente … 6 = aprendida)],
+   * de la palabra más antigua a la más reciente.
+   */
   cards: [number, number, number][];
   /** Palabras quitadas a mano: [índice del cuestionario, índice del par] */
   excluded: [number, number][];
@@ -145,15 +148,17 @@ export interface BoxExportPair {
   b: string;
   /** null si la palabra está excluida de la caja. */
   compartment: number | null;
+  /** Antigüedad en la caja (menor = más antigua). */
+  seq: number;
 }
 
 export function buildBoxExport(box: ExportBox, quizzes: (Omit<ExportQuiz, 'pairs'> & { pairs: BoxExportPair[] })[]): BoxExportFile {
-  const cards: [number, number, number][] = [];
+  const cards: { card: [number, number, number]; seq: number }[] = [];
   const excluded: [number, number][] = [];
   quizzes.forEach((q, qi) =>
     q.pairs.forEach((p, pi) => {
       if (p.compartment === null) excluded.push([qi, pi]);
-      else cards.push([qi, pi, p.compartment]);
+      else cards.push({ card: [qi, pi, p.compartment], seq: p.seq });
     })
   );
   return {
@@ -167,7 +172,7 @@ export function buildBoxExport(box: ExportBox, quizzes: (Omit<ExportQuiz, 'pairs
       inputMode: box.inputMode,
     },
     quizzes: quizzes.map((q) => ({ name: q.name, langA: q.langA, langB: q.langB, pairs: q.pairs.map((p) => [p.a, p.b]) })),
-    cards,
+    cards: cards.sort((x, y) => x.seq - y.seq).map((c) => c.card),
     excluded,
   };
 }
@@ -217,7 +222,8 @@ export interface BoxImportTarget {
   /** Ids de los pares del cuestionario, en orden. */
   pairIds(quizId: number): Promise<number[]>;
   createBox(box: ExportBox, quizIds: number[], excludedPairIds: number[]): Promise<number>;
-  setCompartment(boxId: number, pairId: number, compartment: number): Promise<void>;
+  /** Fija el compartimento y la antigüedad de las palabras de la caja. */
+  setCards(boxId: number, cards: { pairId: number; compartment: number; seq: number }[]): Promise<void>;
 }
 
 /** Crea los cuestionarios en una carpeta nueva con el nombre de la caja, y la caja con su progreso. */
@@ -232,6 +238,10 @@ export async function importBoxInto(file: BoxExportFile, target: BoxImportTarget
   }
   const excluded = file.excluded.map(([qi, pi]) => pairIds[qi][pi]);
   const boxId = await target.createBox(file.box, quizIds, excluded);
-  for (const [qi, pi, compartment] of file.cards) await target.setCompartment(boxId, pairIds[qi][pi], compartment);
+  // El orden del fichero es la antigüedad.
+  await target.setCards(
+    boxId,
+    file.cards.map(([qi, pi, compartment], i) => ({ pairId: pairIds[qi][pi], compartment, seq: i + 1 }))
+  );
   return boxId;
 }

@@ -5,14 +5,15 @@
   import type { LeitnerBox } from '$lib/db/types';
   import { confirmDanger, showError } from '$lib/dialogs.svelte';
   import { exportBox, importBoxFile } from '$lib/files';
-  import { countByCompartment, pickSession } from '$lib/leitner/core';
+  import { countByCompartment, pickNext } from '$lib/leitner/core';
   import { app } from '$lib/state.svelte';
 
   interface BoxView {
     box: LeitnerBox;
     counts: number[];
     /** Palabras que preguntaría una sesión ahora. */
-    due: number;
+    /** Hay algo que preguntar. */
+    ready: boolean;
   }
 
   let boxes = $state<BoxView[] | null>(null);
@@ -26,7 +27,7 @@
     for (const box of list) {
       await repo.syncBox(box.id);
       const cards = await repo.boxCards(box.id);
-      views.push({ box, counts: countByCompartment(cards), due: pickSession(cards, box.firstCapacity).length });
+      views.push({ box, counts: countByCompartment(cards), ready: pickNext(cards, box.firstCapacity) !== null });
     }
     boxes = views;
   }
@@ -90,15 +91,15 @@
   </p>
 {:else if boxes}
   <ul class="boxes">
-    {#each boxes as { box, counts, due } (box.id)}
+    {#each boxes as { box, counts, ready } (box.id)}
       <li class="card">
         <div class="row head">
           <div>
             <div class="name">{box.name}</div>
-            <div class="muted meta">{mode(box)} · {due === 0 ? 'nada que repasar' : `${due} para repasar`}</div>
+            <div class="muted meta">{mode(box)}{ready ? '' : ' · añade más palabras para continuar'}</div>
           </div>
           <div class="row">
-            <button class="primary" disabled={due === 0} onclick={() => goto(`/leitner/${box.id}/play`)}>Practicar</button>
+            <button class="primary" disabled={!ready} onclick={() => goto(`/leitner/${box.id}/play`)}>Practicar</button>
             <button onclick={() => goto(`/leitner/${box.id}/edit`)}>Editar</button>
             <button class="link" onclick={() => doExport(box)}>Exportar</button>
             <button class="link danger" onclick={() => remove(box)}>Borrar</button>
