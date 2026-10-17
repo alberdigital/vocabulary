@@ -305,19 +305,20 @@
       {@render context?.(current)}
 
       {#if opts.answerMode === 'self'}
-        {#if phase === 'ask'}
-          <button class="primary big" onpointerdown={noFocus} onclick={() => (phase = 'revealed')}>
-            Mostrar respuesta <kbd>Espacio</kbd><kbd>Intro</kbd>
-          </button>
-        {:else}
-          <div class="answer">{parse(expectedText).full}</div>
-          <div class="row center">
+        <!-- Ocupa su sitio aun oculta, para que los botones no se muevan al mostrarla. -->
+        <div class="answer" class:hidden={phase === 'ask'} aria-hidden={phase === 'ask'}>{parse(expectedText).full}</div>
+        <div class="row center">
+          {#if phase === 'ask'}
+            <button class="primary big" onpointerdown={noFocus} onclick={() => (phase = 'revealed')}>
+              Mostrar respuesta <kbd>Espacio</kbd><kbd>Intro</kbd>
+            </button>
+          {:else}
             <button class="ok big" onpointerdown={noFocus} onclick={() => selfAnswer(true)}>
               Bien <kbd>Espacio</kbd><kbd>Intro</kbd>
             </button>
             <button class="bad big" onpointerdown={noFocus} onclick={() => selfAnswer(false)}>Mal <kbd>N</kbd></button>
-          </div>
-        {/if}
+          {/if}
+        </div>
       {:else if !handwriting}
         <form class="typed" onsubmit={submitTyped}>
           <input
@@ -463,6 +464,9 @@
     font-size: 2rem;
     color: var(--accent);
     text-align: center;
+  }
+  .answer.hidden {
+    visibility: hidden;
   }
   .center {
     justify-content: center;
