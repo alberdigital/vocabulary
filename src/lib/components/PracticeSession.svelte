@@ -24,6 +24,14 @@
 
   type Phase = 'ask' | 'checking' | 'feedback' | 'revealed';
 
+  /** Lo que dura el destello verde de un acierto antes de pasar a la siguiente: lo justo para verlo. */
+  const FLASH_MS = 150;
+  /**
+   * A mano el acierto dura más y muestra la respuesta escrita a máquina: el reconocimiento puede
+   * haber dado por buena una respuesta que no lo era.
+   */
+  const HANDWRITING_FLASH_MS = 1400;
+
   let {
     title,
     opts,
@@ -97,6 +105,8 @@
   const fromLang = $derived(item ? langName(ab ? item.langA : item.langB) : '');
   const toLang = $derived(item ? langName(ab ? item.langB : item.langA) : '');
   const handwriting = $derived(opts.answerMode === 'typed' && opts.inputMode === 'handwriting');
+  /** Acierto recién registrado: la palabra y la respuesta se ponen verdes un instante (a mano, además, se ve la respuesta). */
+  const flash = $derived(phase === 'feedback' && lastCorrect);
   const hwButtonLabel = $derived(
     phase === 'checking' ? (modelState === 'ready' ? 'Leyendo…' : 'Cargando…') : canvasEmpty ? 'No lo sé' : 'Comprobar'
   );
@@ -154,7 +164,7 @@
   function showFeedback() {
     phase = 'feedback';
     // Los aciertos pasan solos; los fallos esperan a que se pulse Intro.
-    if (lastCorrect) advanceTimer = setTimeout(nextQuestion, 700);
+    if (lastCorrect) advanceTimer = setTimeout(nextQuestion, handwriting ? HANDWRITING_FLASH_MS : FLASH_MS);
   }
 
   function submitTyped(e?: SubmitEvent) {
@@ -197,7 +207,7 @@
     lastCorrect = true;
     version++;
     onoverride?.(current);
-    advanceTimer = setTimeout(nextQuestion, 500);
+    advanceTimer = setTimeout(nextQuestion, HANDWRITING_FLASH_MS);
   }
 
   /** Pasa a la siguiente sin contar la actual (si ya se respondió, la respuesta se queda). */
@@ -291,7 +301,7 @@
         <p class="round-note">Repaso de las falladas</p>
       {/if}
       <p class="lang muted">{fromLang} → {toLang}</p>
-      <div class="prompt">{parse(promptText).full}</div>
+      <div class="prompt" class:right={flash}>{parse(promptText).full}</div>
       {@render context?.(current)}
 
       {#if opts.answerMode === 'self'}
@@ -321,14 +331,19 @@
             class:right={phase === 'feedback' && lastCorrect}
             class:wrong={phase === 'feedback' && !lastCorrect}
           />
-          {#if phase === 'ask'}
-            <button class="primary" type="submit" onpointerdown={noFocus} disabled={!typed.trim()}>Comprobar <kbd>Intro</kbd></button>
+          <!-- Durante el destello sigue a la vista (desactivado) para que nada se mueva. -->
+          {#if phase === 'ask' || flash}
+            <button class="primary" type="submit" onpointerdown={noFocus} disabled={phase !== 'ask' || !typed.trim()}>
+              Comprobar <kbd>Intro</kbd>
+            </button>
           {/if}
         </form>
       {:else}
         <div class="hw">
-          <HandwritingCanvas bind:this={hwCanvas} disabled={phase !== 'ask'} onchange={(empty) => (canvasEmpty = empty)} />
-          {#if phase === 'ask' || phase === 'checking'}
+          <div class="canvas-wrap" class:right={flash}>
+            <HandwritingCanvas bind:this={hwCanvas} disabled={phase !== 'ask'} onchange={(empty) => (canvasEmpty = empty)} />
+          </div>
+          {#if phase === 'ask' || phase === 'checking' || flash}
             <div class="row center">
               <button onpointerdown={noFocus} onclick={() => hwCanvas?.clear()} disabled={phase !== 'ask'}>Borrar <kbd>Supr</kbd></button>
               <button onpointerdown={noFocus} onclick={() => hwCanvas?.undo()} disabled={phase !== 'ask'}>Deshacer <kbd>Ctrl+Z</kbd></button>
@@ -347,24 +362,25 @@
         </div>
       {/if}
 
-      {#if phase === 'feedback'}
-        <div class="feedback" class:right={lastCorrect} class:wrong={!lastCorrect}>
-          {#if lastCorrect}
-            <div class="verdict">✓ ¡Correcto!</div>
-            <div class="muted">{parse(expectedText).full}</div>
-          {:else}
-            <div class="verdict">✗ No es correcto</div>
-            {#if handwriting && lastGiven !== null}
-              <div>La IA leyó: <strong>{lastGiven || '(nada)'}</strong></div>
-            {/if}
-            <div>Respuesta correcta: <strong>{parse(expectedText).full}</strong></div>
-            <div class="row center">
-              {#if handwriting && lastGiven !== null}
-                <button onpointerdown={noFocus} onclick={overrideAsCorrect}>La IA se equivocó, era correcto <kbd>C</kbd></button>
-              {/if}
-              <button class="primary" onpointerdown={noFocus} onclick={nextQuestion}>Continuar <kbd>Intro</kbd></button>
-            </div>
+      {#if flash && handwriting}
+        <div class="feedback right">
+          <div class="verdict">✓ {parse(expectedText).full}</div>
+        </div>
+      {/if}
+
+      {#if phase === 'feedback' && !lastCorrect}
+        <div class="feedback wrong">
+          <div class="verdict">✗ No es correcto</div>
+          {#if handwriting && lastGiven !== null}
+            <div>La IA leyó: <strong>{lastGiven || '(nada)'}</strong></div>
           {/if}
+          <div>Respuesta correcta: <strong>{parse(expectedText).full}</strong></div>
+          <div class="row center">
+            {#if handwriting && lastGiven !== null}
+              <button onpointerdown={noFocus} onclick={overrideAsCorrect}>La IA se equivocó, era correcto <kbd>C</kbd></button>
+            {/if}
+            <button class="primary" onpointerdown={noFocus} onclick={nextQuestion}>Continuar <kbd>Intro</kbd></button>
+          </div>
         </div>
       {/if}
 
@@ -440,6 +456,9 @@
     text-align: center;
     word-break: break-word;
   }
+  .prompt.right {
+    color: var(--ok);
+  }
   .answer {
     font-size: 2rem;
     color: var(--accent);
@@ -493,6 +512,19 @@
   .stack > span.shown {
     visibility: visible;
   }
+  .canvas-wrap {
+    position: relative;
+  }
+  /* El lienzo se pinta de blanco por dentro: el verde va en una capa encima. */
+  .canvas-wrap.right::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 2px solid var(--ok);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--ok) 25%, transparent);
+    pointer-events: none;
+  }
   .hw {
     width: 100%;
     display: flex;
@@ -511,15 +543,16 @@
   .feedback.right {
     background: var(--ok-bg);
   }
+  .right .verdict {
+    color: var(--ok);
+    font-size: 1.6rem;
+  }
   .feedback.wrong {
     background: var(--bad-bg);
   }
   .verdict {
     font-weight: 700;
     font-size: 1.2rem;
-  }
-  .right .verdict {
-    color: var(--ok);
   }
   .wrong .verdict {
     color: var(--bad);
