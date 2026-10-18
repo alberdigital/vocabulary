@@ -301,10 +301,9 @@
   }
   .quizzes li {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.6rem;
     padding: 0.75rem 1rem;
   }
   .name {
