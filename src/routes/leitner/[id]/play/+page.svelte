@@ -5,7 +5,7 @@
   import PracticeSession from '$lib/components/PracticeSession.svelte';
   import * as repo from '$lib/db/repo';
   import type { LeitnerBox, LeitnerCard } from '$lib/db/types';
-  import { showError } from '$lib/dialogs.svelte';
+  import { confirmDanger, showError } from '$lib/dialogs.svelte';
   import { LeitnerEngine } from '$lib/leitner/core';
   import { app, formatDuration } from '$lib/state.svelte';
 
@@ -106,6 +106,22 @@
     remove();
   }
 
+  async function editBox() {
+    if (!(await confirmDanger('¿Ir a editar la caja? Se terminará la práctica (lo respondido ya está guardado).', 'Editar')))
+      return;
+    await writes;
+    goto(`/leitner/${boxId}/edit`);
+  }
+
+  /** Corrige una palabra durante la práctica, en su cuestionario y en la práctica en curso. */
+  async function editWord(card: LeitnerCard, a: string, b: string) {
+    await writes;
+    // a y b van en el orden de la caja; el cuestionario puede tenerlos al revés.
+    await repo.updatePair(card.pairId, card.flipped ? b : a, card.flipped ? a : b);
+    card.a = a;
+    card.b = b;
+  }
+
   /** Pantalla final: al pulsar «Terminar» o cuando no queda nada que preguntar. */
   function end() {
     const e = engine;
@@ -156,6 +172,8 @@
     {onoverride}
     onfinish={end}
     onstop={end}
+    onedit={editBox}
+    oneditword={editWord}
   >
     {#snippet top(card)}
       <div class="bar-wrap">

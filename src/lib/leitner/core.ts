@@ -40,9 +40,12 @@ export function refillCount(inFirst: number, pending: number, first: number): nu
  * Pone la palabra en el orden de idiomas de la caja: si su cuestionario los tiene al revés, le da
  * la vuelta, para que el sentido de la caja (direction) valga igual para todas.
  */
-export function orient<T extends { a: string; b: string; langA: string; langB: string }>(card: T, ref: LangPair | null): T {
+export function orient<T extends { a: string; b: string; langA: string; langB: string; flipped: boolean }>(
+  card: T,
+  ref: LangPair | null
+): T {
   if (!ref || !reversedPair(card.langA, card.langB, ref)) return card;
-  return { ...card, a: card.b, b: card.a, langA: card.langB, langB: card.langA };
+  return { ...card, a: card.b, b: card.a, langA: card.langB, langB: card.langA, flipped: !card.flipped };
 }
 
 /** Estado de una palabra en la caja: lo único que se guarda. */

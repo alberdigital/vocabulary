@@ -169,10 +169,17 @@ describe('LeitnerEngine', () => {
 
 describe('orient', () => {
   const ref = { a: 'en', b: 'es' };
-  const card = (a: string, b: string, langA: string, langB: string) => ({ pairId: 1, a, b, langA, langB });
+  const card = (a: string, b: string, langA: string, langB: string, flipped = false) => ({
+    pairId: 1,
+    a,
+    b,
+    langA,
+    langB,
+    flipped,
+  });
 
   it('da la vuelta a las palabras de un cuestionario con los idiomas al revés', () => {
-    expect(orient(card('perro', 'dog', 'es', 'en'), ref)).toEqual(card('dog', 'perro', 'en', 'es'));
+    expect(orient(card('perro', 'dog', 'es', 'en'), ref)).toEqual(card('dog', 'perro', 'en', 'es', true));
   });
 
   it('deja igual las del mismo orden, las de otro par y las de una caja sin idiomas', () => {

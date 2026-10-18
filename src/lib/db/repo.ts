@@ -277,6 +277,12 @@ export async function saveQuiz(quiz: Quiz): Promise<void> {
   await insertPairs(quiz.id, newRows);
 }
 
+/** Corrige una palabra (desde la práctica). */
+export async function updatePair(pairId: number, a: string, b: string): Promise<void> {
+  await exec('UPDATE pairs SET a = $1, b = $2 WHERE id = $3', [a, b, pairId]);
+  await exec('UPDATE quizzes SET updated_at = $1 WHERE id = (SELECT quiz_id FROM pairs WHERE id = $2)', [now(), pairId]);
+}
+
 export async function moveQuiz(id: number, folderId: number | null): Promise<void> {
   await exec('UPDATE quizzes SET folder_id = $1 WHERE id = $2', [folderId, id]);
 }
@@ -633,6 +639,7 @@ export async function boxCards(boxId: number): Promise<LeitnerCard[]> {
         quizName: r.quiz_name,
         langA: r.lang_a,
         langB: r.lang_b,
+        flipped: false,
       },
       ref
     )

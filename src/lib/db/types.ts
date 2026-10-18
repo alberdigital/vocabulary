@@ -112,6 +112,8 @@ export interface LeitnerCard {
   quizName: string;
   langA: string;
   langB: string;
+  /** a y b están al revés que en el cuestionario (ver orient en leitner/core.ts). */
+  flipped: boolean;
 }
 
 export interface BoxSelection {

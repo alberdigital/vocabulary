@@ -15,6 +15,8 @@
 <script lang="ts" generics="T">
   import { onDestroy, tick, type Snippet } from 'svelte';
   import type { SessionOptions } from '$lib/db/types';
+  import WordEditDialog, { type WordEntry } from '$lib/components/WordEditDialog.svelte';
+  import { showError } from '$lib/dialogs.svelte';
   import HandwritingCanvas from '$lib/handwriting/HandwritingCanvas.svelte';
   import { check as hwCheck, warmUp } from '$lib/handwriting/recognizer';
   import { checkTyped, parse } from '$lib/quiz/answer';
@@ -31,6 +33,8 @@
    * haber dado por buena una respuesta que no lo era.
    */
   const HANDWRITING_FLASH_MS = 1400;
+  /** Palabras que se pueden corregir con «Editar últimas palabras» (incluida la actual). */
+  const RECENT_WORDS = 5;
 
   let {
     title,
@@ -43,6 +47,8 @@
     onoverride,
     onfinish,
     onstop,
+    onedit,
+    oneditword,
     top,
     context,
     actions,
@@ -61,6 +67,13 @@
     /** Cuando el motor no tiene nada más que preguntar. */
     onfinish: () => void;
     onstop: () => void;
+    /** Botón «Editar» de la barra: ir a editar el cuestionario o la caja. */
+    onedit?: () => void;
+    /**
+     * Corrige una palabra (a y b como en toItem): debe guardarla y cambiarla en el propio item, que
+     * es el del motor, para que se pregunte ya corregida.
+     */
+    oneditword?: (item: T, a: string, b: string) => Promise<void>;
     /** Debajo de la barra de progreso. */
     top?: Snippet<[T | null]>;
     /** Debajo de la palabra preguntada. */
@@ -86,8 +99,15 @@
   let hwCanvas: HandwritingCanvas | undefined = $state();
   const timer = setInterval(() => (now = Date.now()), 250);
 
-  /** Palabra en pantalla. No sigue al motor directamente: durante la corrección debe seguir mostrándose la contestada. */
-  let current = $state<T | null>(null);
+  /**
+   * Palabra en pantalla. No sigue al motor directamente: durante la corrección debe seguir mostrándose la contestada.
+   * Es el objeto del motor tal cual (raw), para que corregir una palabra la cambie también allí.
+   */
+  let current = $state.raw<T | null>(null);
+  /** Últimas palabras preguntadas, de la más antigua a la actual, sin repetir. */
+  let recent = $state.raw<T[]>([]);
+  /** «Editar últimas palabras» abierto (desde qué momento, para no contarlo en el tiempo de respuesta). */
+  let editingSince = $state<number | null>(null);
   /** Ronda y posición de la palabra en pantalla (se fijan al mostrarla); size null = sin número fijo. */
   let position = $state<{ round: number; index: number; size: number | null }>({ round: 1, index: 1, size: 1 });
   const errors = $derived.by(() => {
@@ -98,7 +118,13 @@
     version;
     return engine.roundDone;
   });
-  const item = $derived(current ? toItem(current) : null);
+  const item = $derived.by(() => {
+    version; // una corrección cambia el item sin cambiar current
+    if (!current) return null;
+    // Copia: toItem puede devolver el propio objeto (cajas) y, si no cambia, lo que depende de item no se recalcula.
+    const { a, b, langA, langB } = toItem(current);
+    return { a, b, langA, langB };
+  });
   const ab = $derived(opts.direction === 'AB');
   const promptText = $derived(item ? (ab ? item.a : item.b) : '');
   const expectedText = $derived(item ? (ab ? item.b : item.a) : '');
@@ -139,6 +165,7 @@
       return onfinish();
     }
     current = engine.current ?? null;
+    if (current) recent = [...recent.filter((x) => x !== current), current].slice(-RECENT_WORDS);
     position = { round: engine.round, index: engine.roundDone + 1, size: engine.roundSize };
     phase = 'ask';
     typed = '';
@@ -217,7 +244,35 @@
     nextQuestion();
   }
 
+  /** Las últimas palabras en el sentido de la práctica, para el diálogo. */
+  function recentEntries(): WordEntry[] {
+    return recent.map((t) => {
+      const it = toItem(t);
+      const [a, b] = [langName(it.langA), langName(it.langB)];
+      return ab ? { from: it.a, to: it.b, fromLang: a, toLang: b } : { from: it.b, to: it.a, fromLang: b, toLang: a };
+    });
+  }
+
+  async function saveWord(index: number, from: string, to: string) {
+    const t = recent[index];
+    if (!t || !oneditword) return;
+    try {
+      await oneditword(t, ab ? from : to, ab ? to : from);
+    } catch (e) {
+      showError(e);
+    }
+    version++;
+  }
+
+  async function closeEditor() {
+    if (editingSince !== null) questionShownAt += Date.now() - editingSince;
+    editingSince = null;
+    await tick();
+    answerInput?.focus();
+  }
+
   function onKey(e: KeyboardEvent) {
+    if (editingSince !== null) return; // el diálogo tiene sus propias teclas
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
       e.preventDefault();
       showDebug = !showDebug;
@@ -288,6 +343,7 @@
       </div>
       <div class="row">
         <span class="clock">{formatDuration(now - startedAt)}</span>
+        {#if onedit}<button onpointerdown={noFocus} onclick={onedit}>Editar</button>{/if}
         <button onpointerdown={noFocus} onclick={onstop}>{stopLabel}</button>
       </div>
     </header>
@@ -385,8 +441,15 @@
         </div>
       {/if}
 
-      {#if actions && phase !== 'checking'}
-        <div class="row center extra">{@render actions({ item: current, phase, remove })}</div>
+      {#if (actions || oneditword) && phase !== 'checking'}
+        <div class="row center extra">
+          {#if oneditword}
+            <button class="link quiet" onpointerdown={noFocus} onclick={() => (editingSince = Date.now())}>
+              Editar últimas palabras
+            </button>
+          {/if}
+          {@render actions?.({ item: current, phase, remove })}
+        </div>
       {/if}
 
       {#if showDebug && lastScores}
@@ -394,6 +457,9 @@
       {/if}
     </div>
   </div>
+  {#if editingSince !== null}
+    <WordEditDialog entries={recentEntries()} onsave={saveWord} onclose={closeEditor} />
+  {/if}
 {/if}
 
 <style>
@@ -563,6 +629,13 @@
   }
   .extra {
     margin-top: 0.5rem;
+  }
+  .stage button.quiet {
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  .stage button.quiet:hover {
+    color: var(--text);
   }
   .debug {
     font-size: 0.8rem;

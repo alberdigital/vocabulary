@@ -116,6 +116,19 @@
     goto(quiz?.folderId ? `/library?folder=${quiz.folderId}` : '/library');
   }
 
+  async function editQuiz() {
+    if (!(await confirmDanger('¿Ir a editar el cuestionario? Se abandonará la sesión y no se guardará el resultado.', 'Editar')))
+      return;
+    goto(`/quiz/${quizId}/edit`);
+  }
+
+  /** Corrige una palabra durante la práctica: en la base de datos y en la sesión en curso. */
+  async function editWord(p: SavedPair, a: string, b: string) {
+    await repo.updatePair(p.id, a, b);
+    p.a = a;
+    p.b = b;
+  }
+
   function onKey(e: KeyboardEvent) {
     if (!engine && e.key === 'Enter' && quiz) {
       e.preventDefault();
@@ -175,6 +188,8 @@
     toItem={(p) => ({ a: p.a, b: p.b, langA: quiz!.langA, langB: quiz!.langB })}
     onfinish={finish}
     onstop={abandon}
+    onedit={editQuiz}
+    oneditword={editWord}
   />
 {/if}
 
