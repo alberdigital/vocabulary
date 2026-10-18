@@ -1,4 +1,8 @@
-<!-- Dibujo de una caja de Leitner: compartimentos de ancho proporcional a su capacidad, con N/M. -->
+<!--
+  Dibujo de una caja de Leitner: compartimentos con N/M, más anchos cuanto más capacidad tienen.
+  El ancho sigue la capacidad elevada a 0,7: proporcional, el 5.º sería 14 veces el 1.º y no
+  cabrían los números; con una escala logarítmica o la raíz cuadrada parecerían casi iguales.
+-->
 <script lang="ts">
   import { capacities, LEARNED, PENDING } from '$lib/leitner/core';
 
@@ -15,6 +19,8 @@
   } = $props();
 
   const caps = $derived(capacities(firstCapacity));
+  /** Ancho relativo: con las proporciones 1:2:5:8:14 queda en 1 : 1,6 : 3,1 : 4,3 : 6,3. */
+  const width = (cap: number) => cap ** 0.7;
 </script>
 
 <div class="leitner">
@@ -28,7 +34,7 @@
         class="comp"
         class:full={n >= cap}
         class:hl={highlight === i + 1}
-        style:flex-grow={cap}
+        style:flex-grow={width(cap)}
         title="Compartimento {i + 1}: {n} de {cap} palabras"
       >
         <div class="fill" style:height="{Math.min(100, (n / cap) * 100)}%"></div>
@@ -69,8 +75,9 @@
   .comp {
     position: relative;
     flex-basis: 0;
-    /* Sin mínimo fijo: el ancho es proporcional a la capacidad mientras quepa el número. */
-    padding: 0 0.15rem;
+    /* Sin mínimo fijo: el ancho sigue la capacidad mientras quepa el número. El relleno deja
+       sitio al borde del resaltado (.hl) para que no toque el número. */
+    padding: 0 calc(3px + 0.3rem);
     height: 2.2rem;
     display: grid;
     place-items: center;
