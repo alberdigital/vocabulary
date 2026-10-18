@@ -213,8 +213,8 @@
         Marca carpetas, cuestionarios o palabras sueltas. Las palabras nuevas que se añadan después a un cuestionario
         marcado entrarán solas en la caja.
         {#if langNames}
-          <br />Solo se pueden combinar cuestionarios de {langNames.a} y {langNames.b}, en cualquier sentido: se preguntan
-          todos en el sentido elegido.
+          <br />Esta caja es de {langNames.a} y {langNames.b}: solo admite cuestionarios de esos dos idiomas (en
+          cualquier orden) y todos se preguntan en el sentido elegido.
         {:else}
           <br />Todos los cuestionarios de la caja deben ser del mismo par de idiomas: lo decide el primero que marques.
         {/if}
