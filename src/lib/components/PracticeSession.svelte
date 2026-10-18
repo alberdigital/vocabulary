@@ -62,7 +62,7 @@
     stopLabel?: string;
     /** Tras registrar una respuesta en el motor. */
     onanswered?: (item: T, correct: boolean) => void;
-    /** Tras corregir como acierto la última respuesta («La IA se equivocó»). */
+    /** Tras corregir como acierto la última respuesta («La IA se equivocó» o «Marcar correcta»). */
     onoverride?: (item: T) => void;
     /** Cuando el motor no tiene nada más que preguntar. */
     onfinish: () => void;
@@ -228,13 +228,17 @@
     nextQuestion();
   }
 
+  /**
+   * Da por buena la última respuesta escrita, a mano («La IA se equivocó») o con teclado («Marcar
+   * correcta»: otra forma válida de decirlo, una pregunta ambigua…).
+   */
   function overrideAsCorrect() {
     if (!current || phase !== 'feedback' || lastCorrect || lastGiven === null) return;
     engine.overrideLastAsCorrect();
     lastCorrect = true;
     version++;
     onoverride?.(current);
-    advanceTimer = setTimeout(nextQuestion, HANDWRITING_FLASH_MS);
+    advanceTimer = setTimeout(nextQuestion, handwriting ? HANDWRITING_FLASH_MS : FLASH_MS);
   }
 
   /** Pasa a la siguiente sin contar la actual (si ya se respondió, la respuesta se queda). */
@@ -286,7 +290,7 @@
       if (key === 'Enter') {
         e.preventDefault();
         nextQuestion();
-      } else if (handwriting && !lastCorrect && key.toLowerCase() === 'c') {
+      } else if (opts.answerMode === 'typed' && !lastCorrect && key.toLowerCase() === 'c') {
         e.preventDefault();
         overrideAsCorrect();
       }
@@ -433,8 +437,10 @@
           {/if}
           <div>Respuesta correcta: <strong>{parse(expectedText).full}</strong></div>
           <div class="row center">
-            {#if handwriting && lastGiven !== null}
-              <button onpointerdown={noFocus} onclick={overrideAsCorrect}>La IA se equivocó, era correcto <kbd>C</kbd></button>
+            {#if lastGiven !== null}
+              <button onpointerdown={noFocus} onclick={overrideAsCorrect}>
+                {handwriting ? 'La IA se equivocó, era correcto' : 'Marcar correcta'} <kbd>C</kbd>
+              </button>
             {/if}
             <button class="primary" onpointerdown={noFocus} onclick={nextQuestion}>Continuar <kbd>Intro</kbd></button>
           </div>
