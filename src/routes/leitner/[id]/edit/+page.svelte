@@ -6,7 +6,7 @@
   import type { Folder, LeitnerCard, QuizSummary, SessionOptions } from '$lib/db/types';
   import { confirmDanger, showError } from '$lib/dialogs.svelte';
   import { capacities, SUGGESTED_FIRST_CAPACITY } from '$lib/leitner/core';
-  import { langName } from '$lib/quiz/languages';
+  import { langName, type LangPair } from '$lib/quiz/languages';
   import { app } from '$lib/state.svelte';
 
   const isNew = $derived(page.params.id === 'new');
@@ -21,6 +21,8 @@
   let quizIds = $state(new Set<number>());
   let excluded = $state(new Set<number>());
   let pairs = $state(new Map<number, { id: number; a: string; b: string }[]>());
+  /** Idiomas de la caja, en el orden al que se refiere el sentido (los fija el selector). */
+  let langs = $state<LangPair | null>(null);
   /** Palabras que la caja tiene guardadas (para avisar de lo que se pierde al quitar). */
   let savedCards: LeitnerCard[] = [];
   let saved = $state('');
@@ -33,7 +35,14 @@
     return out.sort((x, y) => x - y);
   }
   const snapshot = () =>
-    JSON.stringify({ name, firstCapacity, opts, quizIds: [...quizIds].sort((x, y) => x - y), excluded: effectiveExcluded() });
+    JSON.stringify({
+      name,
+      firstCapacity,
+      opts,
+      langs,
+      quizIds: [...quizIds].sort((x, y) => x - y),
+      excluded: effectiveExcluded(),
+    });
   const dirty = $derived(loaded && snapshot() !== saved);
 
   $effect(() => {
@@ -57,6 +66,10 @@
         excluded = new Set(sel.excludedPairIds);
         pairs = await repo.pairsOfQuizzes(sel.quizIds);
         savedCards = await repo.boxCards(id);
+        if (quizIds.size > 0) {
+          const first = quizzes.find((q) => quizIds.has(q.id));
+          langs = box.langA && box.langB ? { a: box.langA, b: box.langB } : first ? { a: first.langA, b: first.langB } : null;
+        }
       }
       saved = snapshot();
       loaded = true;
@@ -70,12 +83,7 @@
       return n + (ps ? ps.filter((p) => !excluded.has(p.id)).length : q.pairCount);
     }, 0)
   );
-  /** Idiomas comunes a todos los cuestionarios incluidos, para rotular el sentido. */
-  const langs = $derived.by(() => {
-    const first = included[0];
-    if (!first || included.some((q) => q.langA !== first.langA || q.langB !== first.langB)) return null;
-    return { a: langName(first.langA), b: langName(first.langB) };
-  });
+  const langNames = $derived(langs ? { a: langName(langs.a), b: langName(langs.b) } : null);
   const capacityOk = $derived(Number.isInteger(firstCapacity) && firstCapacity >= 1 && firstCapacity <= 1000);
   const canSave = $derived(name.trim() !== '' && capacityOk);
 
@@ -94,7 +102,7 @@
 
   async function save(): Promise<boolean> {
     if (!canSave || !app.user) return false;
-    const settings = { name: name.trim(), firstCapacity, ...opts };
+    const settings = { name: name.trim(), firstCapacity, ...opts, langA: langs?.a ?? null, langB: langs?.b ?? null };
     const sel = { quizIds: [...quizIds], excludedPairIds: effectiveExcluded() };
     try {
       if (boxId === null) {
@@ -173,11 +181,11 @@
         <legend>Sentido</legend>
         <label class="radio">
           <input type="radio" bind:group={opts.direction} value="AB" />
-          {langs ? `${langs.a} → ${langs.b}` : 'Idioma A → idioma B'}
+          {langNames ? `${langNames.a} → ${langNames.b}` : 'Idioma A → idioma B'}
         </label>
         <label class="radio">
           <input type="radio" bind:group={opts.direction} value="BA" />
-          {langs ? `${langs.b} → ${langs.a}` : 'Idioma B → idioma A'}
+          {langNames ? `${langNames.b} → ${langNames.a}` : 'Idioma B → idioma A'}
         </label>
       </fieldset>
 
@@ -204,11 +212,17 @@
       <p class="muted small">
         Marca carpetas, cuestionarios o palabras sueltas. Las palabras nuevas que se añadan después a un cuestionario
         marcado entrarán solas en la caja.
+        {#if langNames}
+          <br />Solo se pueden combinar cuestionarios de {langNames.a} y {langNames.b}, en cualquier sentido: se preguntan
+          todos en el sentido elegido.
+        {:else}
+          <br />Todos los cuestionarios de la caja deben ser del mismo par de idiomas: lo decide el primero que marques.
+        {/if}
       </p>
       {#if quizzes.length === 0}
         <p class="muted">Todavía no hay cuestionarios. Créalos en la pestaña «Cuestionarios».</p>
       {:else}
-        <QuizPicker {folders} {quizzes} bind:quizIds bind:excluded bind:pairs onbeforeremove={confirmRemove} />
+        <QuizPicker {folders} {quizzes} bind:quizIds bind:excluded bind:pairs bind:langs onbeforeremove={confirmRemove} />
       {/if}
     </div>
   </div>

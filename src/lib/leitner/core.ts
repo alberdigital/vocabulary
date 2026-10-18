@@ -7,6 +7,7 @@
 // No hay sesiones: tras cada respuesta se elige la siguiente palabra (ver pickNext).
 
 import type { EngineAnswer, PracticeEngine } from '../quiz/engine';
+import { reversedPair, type LangPair } from '../quiz/languages';
 
 export const PENDING = 0;
 export const LEARNED = 6;
@@ -33,6 +34,15 @@ export function countByCompartment(cards: { compartment: number }[]): number[] {
 /** Cuántas pendientes caben ahora en el 1.er compartimento. */
 export function refillCount(inFirst: number, pending: number, first: number): number {
   return Math.max(0, Math.min(pending, first - inFirst));
+}
+
+/**
+ * Pone la palabra en el orden de idiomas de la caja: si su cuestionario los tiene al revés, le da
+ * la vuelta, para que el sentido de la caja (direction) valga igual para todas.
+ */
+export function orient<T extends { a: string; b: string; langA: string; langB: string }>(card: T, ref: LangPair | null): T {
+  if (!ref || !reversedPair(card.langA, card.langB, ref)) return card;
+  return { ...card, a: card.b, b: card.a, langA: card.langB, langB: card.langA };
 }
 
 /** Estado de una palabra en la caja: lo único que se guarda. */

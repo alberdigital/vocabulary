@@ -89,6 +89,12 @@ export interface LeitnerBox extends SessionOptions {
   name: string;
   /** Capacidad del 1.er compartimento; el resto se calcula (ver leitner/core.ts). */
   firstCapacity: number;
+  /**
+   * Idiomas de la caja, en el orden al que se refiere direction (null si está vacía). Las
+   * palabras de un cuestionario con los idiomas al revés se preguntan dándoles la vuelta.
+   */
+  langA: string | null;
+  langB: string | null;
   createdAt: string;
   updatedAt: string;
 }

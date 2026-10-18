@@ -125,6 +125,9 @@ export async function importInto(file: ExportFile, parentId: number | null, targ
 export interface ExportBox extends SessionOptions {
   name: string;
   firstCapacity: number;
+  /** Idiomas de la caja, en el orden al que se refiere direction. Los ficheros antiguos no los traen. */
+  langA?: string | null;
+  langB?: string | null;
 }
 
 /** Una caja con sus cuestionarios completos y el compartimento de cada palabra. */
@@ -170,6 +173,8 @@ export function buildBoxExport(box: ExportBox, quizzes: (Omit<ExportQuiz, 'pairs
       direction: box.direction,
       answerMode: box.answerMode,
       inputMode: box.inputMode,
+      langA: box.langA ?? null,
+      langB: box.langB ?? null,
     },
     quizzes: quizzes.map((q) => ({ name: q.name, langA: q.langA, langB: q.langB, pairs: q.pairs.map((p) => [p.a, p.b]) })),
     cards: cards.sort((x, y) => x.seq - y.seq).map((c) => c.card),
@@ -200,6 +205,7 @@ export function parseBoxExport(text: string): BoxExportFile {
     (b.direction === 'AB' || b.direction === 'BA') &&
     (b.answerMode === 'typed' || b.answerMode === 'self') &&
     (b.inputMode === 'keyboard' || b.inputMode === 'handwriting') &&
+    [b.langA, b.langB].every((l) => l === undefined || l === null || typeof l === 'string') &&
     Array.isArray(d.quizzes) &&
     d.quizzes.every(isQuiz) &&
     Array.isArray(d.cards) &&
@@ -221,7 +227,11 @@ export interface BoxImportTarget {
   ): Promise<number>;
   /** Ids de los pares del cuestionario, en orden. */
   pairIds(quizId: number): Promise<number[]>;
-  createBox(box: ExportBox, quizIds: number[], excludedPairIds: number[]): Promise<number>;
+  createBox(
+    box: ExportBox & { langA: string | null; langB: string | null },
+    quizIds: number[],
+    excludedPairIds: number[]
+  ): Promise<number>;
   /** Fija el compartimento y la antigüedad de las palabras de la caja. */
   setCards(boxId: number, cards: { pairId: number; compartment: number; seq: number }[]): Promise<void>;
 }
@@ -237,7 +247,11 @@ export async function importBoxInto(file: BoxExportFile, target: BoxImportTarget
     pairIds.push(await target.pairIds(id));
   }
   const excluded = file.excluded.map(([qi, pi]) => pairIds[qi][pi]);
-  const boxId = await target.createBox(file.box, quizIds, excluded);
+  // Sin idiomas en el fichero (versiones antiguas), manda el primer cuestionario.
+  const { langA, langB } = file.box;
+  const langs =
+    langA && langB ? { langA, langB } : { langA: file.quizzes[0]?.langA ?? null, langB: file.quizzes[0]?.langB ?? null };
+  const boxId = await target.createBox({ ...file.box, ...langs }, quizIds, excluded);
   // El orden del fichero es la antigüedad.
   await target.setCards(
     boxId,

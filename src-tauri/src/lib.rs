@@ -150,6 +150,22 @@ CREATE INDEX idx_leitner_cards_box ON leitner_cards(box_id, compartment, seq);
 ALTER TABLE leitner_sessions DROP COLUMN abandoned;
 "#,
         },
+        Migration {
+            version: 4,
+            description: "idiomas de referencia de las cajas de Leitner",
+            kind: MigrationKind::Up,
+            sql: r#"
+-- Par de idiomas de la caja, en el orden al que se refiere direction. Las palabras de un
+-- cuestionario con los idiomas al revés se preguntan dándoles la vuelta. NULL = caja vacía.
+ALTER TABLE leitner_boxes ADD COLUMN lang_a TEXT NULL;
+ALTER TABLE leitner_boxes ADD COLUMN lang_b TEXT NULL;
+UPDATE leitner_boxes SET
+  lang_a = (SELECT q.lang_a FROM leitner_box_quizzes bq JOIN quizzes q ON q.id = bq.quiz_id
+            WHERE bq.box_id = leitner_boxes.id ORDER BY q.name COLLATE NOCASE, q.id LIMIT 1),
+  lang_b = (SELECT q.lang_b FROM leitner_box_quizzes bq JOIN quizzes q ON q.id = bq.quiz_id
+            WHERE bq.box_id = leitner_boxes.id ORDER BY q.name COLLATE NOCASE, q.id LIMIT 1);
+"#,
+        },
     ]
 }
 

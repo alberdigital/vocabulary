@@ -71,7 +71,15 @@ describe('exportar e importar', () => {
 });
 
 describe('cajas de Leitner', () => {
-  const box = { name: 'Repaso', firstCapacity: 10, direction: 'BA' as const, answerMode: 'typed' as const, inputMode: 'handwriting' as const };
+  const box = {
+    name: 'Repaso',
+    firstCapacity: 10,
+    direction: 'BA' as const,
+    answerMode: 'typed' as const,
+    inputMode: 'handwriting' as const,
+    langA: 'es',
+    langB: 'en',
+  };
   const file = buildBoxExport(box, [
     {
       name: 'Animales',
@@ -135,5 +143,21 @@ describe('cajas de Leitner', () => {
       { pairId: 6, compartment: 0, seq: 1 },
       { pairId: 3, compartment: 3, seq: 2 },
     ]);
+  });
+
+  it('en ficheros sin idiomas de la caja, toma los del primer cuestionario', async () => {
+    const { langA: _a, langB: _b, ...old } = file.box;
+    let langs: unknown = null;
+    await importBoxInto(parseBoxExport(JSON.stringify({ ...file, box: old })), {
+      createFolder: async () => 1,
+      createQuiz: async () => 2,
+      pairIds: async () => [3, 4],
+      createBox: async (b) => {
+        langs = [b.langA, b.langB];
+        return 99;
+      },
+      setCards: async () => {},
+    });
+    expect(langs).toEqual(['en', 'es']);
   });
 });

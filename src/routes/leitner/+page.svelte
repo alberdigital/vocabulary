@@ -6,6 +6,7 @@
   import { confirmDanger, showError } from '$lib/dialogs.svelte';
   import { exportBox, importBoxFile } from '$lib/files';
   import { countByCompartment, pickNext } from '$lib/leitner/core';
+  import { langName } from '$lib/quiz/languages';
   import { app } from '$lib/state.svelte';
 
   interface BoxView {
@@ -42,7 +43,8 @@
   }
 
   function mode(b: LeitnerBox): string {
-    const dir = b.direction === 'AB' ? 'A→B' : 'B→A';
+    const [from, to] = b.langA && b.langB ? [langName(b.langA), langName(b.langB)] : ['A', 'B'];
+    const dir = b.direction === 'AB' ? `${from} → ${to}` : `${to} → ${from}`;
     if (b.answerMode === 'self') return `${dir} · autoevaluación`;
     return `${dir} · ${b.inputMode === 'handwriting' ? 'a mano' : 'teclado'}`;
   }

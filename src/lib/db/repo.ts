@@ -3,7 +3,7 @@
 // las escrituras de varias filas se hacen con un único INSERT de varias filas.
 
 import { fisherYates } from '$lib/quiz/engine';
-import { PENDING, refill, type CardRef } from '$lib/leitner/core';
+import { orient, PENDING, refill, type CardRef } from '$lib/leitner/core';
 import { db } from './client';
 import type {
   AnswerRecord,
@@ -440,6 +440,8 @@ interface BoxRow {
   direction: 'AB' | 'BA';
   answer_mode: 'typed' | 'self';
   input_mode: 'keyboard' | 'handwriting';
+  lang_a: string | null;
+  lang_b: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -452,11 +454,16 @@ const toBox = (r: BoxRow): LeitnerBox => ({
   direction: r.direction,
   answerMode: r.answer_mode,
   inputMode: r.input_mode,
+  langA: r.lang_a,
+  langB: r.lang_b,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
 
-export type BoxSettings = Pick<LeitnerBox, 'name' | 'firstCapacity' | 'direction' | 'answerMode' | 'inputMode'>;
+export type BoxSettings = Pick<
+  LeitnerBox,
+  'name' | 'firstCapacity' | 'direction' | 'answerMode' | 'inputMode' | 'langA' | 'langB'
+>;
 
 /** Lista de ids como "$2,$3,…" a partir del parámetro offset + 1. */
 const idList = (ids: unknown[], offset: number) => ids.map((_, i) => `$${offset + i + 1}`).join(',');
@@ -476,9 +483,10 @@ export async function getBox(id: number): Promise<LeitnerBox | null> {
 export async function createBox(userId: number, b: BoxSettings): Promise<number> {
   const t = now();
   return insert(
-    `INSERT INTO leitner_boxes (user_id, name, first_capacity, direction, answer_mode, input_mode, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [userId, b.name.trim(), b.firstCapacity, b.direction, b.answerMode, b.inputMode, t, t]
+    `INSERT INTO leitner_boxes (user_id, name, first_capacity, direction, answer_mode, input_mode, lang_a, lang_b,
+       created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    [userId, b.name.trim(), b.firstCapacity, b.direction, b.answerMode, b.inputMode, b.langA, b.langB, t, t]
   );
 }
 
@@ -486,8 +494,8 @@ export async function createBox(userId: number, b: BoxSettings): Promise<number>
 export async function updateBox(id: number, b: BoxSettings): Promise<void> {
   await exec(
     `UPDATE leitner_boxes SET name = $1, first_capacity = $2, direction = $3, answer_mode = $4, input_mode = $5,
-       updated_at = $6 WHERE id = $7`,
-    [b.name.trim(), b.firstCapacity, b.direction, b.answerMode, b.inputMode, now(), id]
+       lang_a = $6, lang_b = $7, updated_at = $8 WHERE id = $9`,
+    [b.name.trim(), b.firstCapacity, b.direction, b.answerMode, b.inputMode, b.langA, b.langB, now(), id]
   );
   await refillBox(id);
 }
@@ -593,8 +601,10 @@ export async function saveCards(boxId: number, cards: CardRef[]): Promise<void> 
   }
 }
 
-/** Todas las palabras de la caja, de la más antigua a la más reciente. */
+/** Todas las palabras de la caja, de la más antigua a la más reciente, en el orden de idiomas de la caja. */
 export async function boxCards(boxId: number): Promise<LeitnerCard[]> {
+  const box = await getBox(boxId);
+  const ref = box?.langA && box.langB ? { a: box.langA, b: box.langB } : null;
   const rows = await select<{
     pair_id: number;
     compartment: number;
@@ -611,17 +621,22 @@ export async function boxCards(boxId: number): Promise<LeitnerCard[]> {
      WHERE c.box_id = $1 ORDER BY c.seq`,
     [boxId]
   );
-  return rows.map((r) => ({
-    pairId: r.pair_id,
-    compartment: r.compartment,
-    seq: r.seq,
-    a: r.a,
-    b: r.b,
-    quizId: r.quiz_id,
-    quizName: r.quiz_name,
-    langA: r.lang_a,
-    langB: r.lang_b,
-  }));
+  return rows.map((r) =>
+    orient(
+      {
+        pairId: r.pair_id,
+        compartment: r.compartment,
+        seq: r.seq,
+        a: r.a,
+        b: r.b,
+        quizId: r.quiz_id,
+        quizName: r.quiz_name,
+        langA: r.lang_a,
+        langB: r.lang_b,
+      },
+      ref
+    )
+  );
 }
 
 /**

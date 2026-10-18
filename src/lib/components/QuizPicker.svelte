@@ -1,12 +1,15 @@
 <!--
   Árbol para elegir el contenido de una caja de Leitner: carpetas, cuestionarios y palabras, cada
   uno con su checkbox. Un cuestionario incluido aporta todas sus palabras salvo las excluidas.
+  Solo se pueden combinar cuestionarios del mismo par de idiomas (en cualquier orden): el primero
+  que se marca fija el par y los demás se deshabilitan.
 -->
 <script lang="ts">
   import { tick, type Snippet } from 'svelte';
   import * as repo from '$lib/db/repo';
   import type { Folder, QuizSummary } from '$lib/db/types';
   import { parse } from '$lib/quiz/answer';
+  import { langName, samePair, type LangPair } from '$lib/quiz/languages';
 
   type PairInfo = { id: number; a: string; b: string };
 
@@ -16,6 +19,7 @@
     quizIds = $bindable(),
     excluded = $bindable(),
     pairs = $bindable(),
+    langs = $bindable(),
     onbeforeremove,
   }: {
     folders: Folder[];
@@ -26,6 +30,8 @@
     excluded: Set<number>;
     /** Palabras ya cargadas de cada cuestionario (se cargan al desplegarlo). */
     pairs: Map<number, PairInfo[]>;
+    /** Idiomas de la caja, en orden: los del primer cuestionario marcado (null sin nada marcado). */
+    langs: LangPair | null;
     /** Se llama antes de quitar cuestionarios enteros; si devuelve false no se quitan. */
     onbeforeremove?: (quizIds: number[]) => Promise<boolean>;
   } = $props();
@@ -33,10 +39,21 @@
   const childrenOf = (id: number | null) => folders.filter((f) => f.parentId === id);
   const quizzesIn = (id: number | null) => quizzes.filter((q) => q.folderId === id);
 
-  /** Cuestionarios de una carpeta y de todas sus subcarpetas. */
+  /** Cuestionarios de una carpeta y de todas sus subcarpetas, en el orden en que se ven. */
   function quizzesInTree(id: number): QuizSummary[] {
-    const ids = repo.descendantIds(folders, id);
-    return quizzes.filter((q) => q.folderId !== null && ids.has(q.folderId));
+    return [...childrenOf(id).flatMap((f) => quizzesInTree(f.id)), ...quizzesIn(id)];
+  }
+
+  /**
+   * Se puede marcar: es del par de idiomas de la caja. Los ya incluidos de otro par (de cajas de
+   * antes de esta regla) siguen habilitados para poder quitarlos.
+   */
+  const enabled = (q: QuizSummary) => !langs || samePair(q.langA, q.langB, langs) || quizIds.has(q.id);
+  const eligible = (list: QuizSummary[]) => list.filter(enabled);
+
+  /** Si aún no hay par de idiomas, lo fija el cuestionario. */
+  function adoptLangs(q: QuizSummary) {
+    if (!langs) langs = { a: q.langA, b: q.langB };
   }
 
   // Desplegadas al principio: las carpetas con algo marcado (y sus antecesoras).
@@ -92,14 +109,15 @@
     return n === q.pairCount ? 'all' : 'some';
   }
 
-  function groupState(list: QuizSummary[]): Check {
+  function groupState(all: QuizSummary[]): Check {
+    const list = eligible(all);
     if (list.length === 0) return 'none';
     const states = list.map(quizState);
     if (states.every((s) => s === 'all')) return 'all';
     return states.every((s) => s === 'none') ? 'none' : 'some';
   }
 
-  const total = (list: QuizSummary[]) => list.reduce((n, q) => n + q.pairCount, 0);
+  const total = (list: QuizSummary[]) => eligible(list).reduce((n, q) => n + q.pairCount, 0);
   const selected = (list: QuizSummary[]) => list.reduce((n, q) => n + selectedIn(q), 0);
 
   // ---------- Cambios ----------
@@ -109,8 +127,16 @@
     excluded = new Set([...excluded].filter((p) => !drop.has(p)));
   }
 
-  /** Marca (todas sus palabras) o desmarca un grupo de cuestionarios. */
-  async function setQuizzes(list: QuizSummary[], on: boolean) {
+  /**
+   * Marca (todas sus palabras) o desmarca un grupo de cuestionarios. Al marcar solo entran los del
+   * par de idiomas de la caja; si aún no lo hay, lo decide el primero del grupo.
+   */
+  async function setQuizzes(all: QuizSummary[], on: boolean) {
+    let list = eligible(all);
+    if (on && list.length > 0 && !langs) {
+      adoptLangs(list[0]);
+      list = eligible(list);
+    }
     const ids = list.map((q) => q.id);
     if (on) {
       // Hace falta conocer sus palabras para limpiar exclusiones antiguas.
@@ -124,6 +150,7 @@
       if (onbeforeremove && !(await onbeforeremove(removing))) return;
       clearExclusionsOf(removing);
       quizIds = new Set([...quizIds].filter((id) => !removing.includes(id)));
+      if (quizIds.size === 0) langs = null;
     }
   }
 
@@ -131,6 +158,7 @@
     const ps = pairs.get(q.id) ?? [];
     if (!quizIds.has(q.id)) {
       // Marcar una palabra de un cuestionario no incluido: se incluye solo esa.
+      adoptLangs(q);
       quizIds = new Set([...quizIds, q.id]);
       excluded = new Set([...excluded, ...ps.filter((p) => p.id !== pairId).map((p) => p.id)]);
       return;
@@ -172,13 +200,24 @@
 
 {#snippet quizRow(q: QuizSummary, depth: number)}
   {@const state = quizState(q)}
+  {@const off = !enabled(q)}
   <li>
-    <div class="item" style:padding-left="{0.4 + depth * 1.2}rem">
+    <div
+      class="item"
+      class:off
+      style:padding-left="{0.4 + depth * 1.2}rem"
+      title={off && langs ? `Es de ${langName(q.langA)}–${langName(q.langB)}; la caja es de ${langName(langs.a)}–${langName(langs.b)}` : undefined}
+    >
       <button class="twisty" onclick={() => toggleQuizOpen(q.id)} aria-label={open.has(`q${q.id}`) ? 'Plegar' : 'Desplegar'}>
         {open.has(`q${q.id}`) ? '▾' : '▸'}
       </button>
       <label>
-        <input type="checkbox" use:tri={state} onchange={(e) => change(e, () => setQuizzes([q], state !== 'all'))} />
+        <input
+          type="checkbox"
+          use:tri={state}
+          disabled={off}
+          onchange={(e) => change(e, () => setQuizzes([q], state !== 'all'))}
+        />
         <span class="name">📄 {q.name}</span>
       </label>
       <span class="count" class:on={state !== 'none'}>{selectedIn(q)}/{q.pairCount}</span>
@@ -187,9 +226,10 @@
       <ul>
         {#each pairs.get(q.id) ?? [] as p (p.id)}
           <li>
-            <label class="item word" style:padding-left="{0.4 + (depth + 1) * 1.2 + 1.4}rem">
+            <label class="item word" class:off style:padding-left="{0.4 + (depth + 1) * 1.2 + 1.4}rem">
               <input
                 type="checkbox"
+                disabled={off}
                 use:tri={quizIds.has(q.id) && !excluded.has(p.id) ? 'all' : 'none'}
                 onchange={(e) => change(e, () => togglePair(q, p.id))}
               />
@@ -215,7 +255,7 @@
         <input
           type="checkbox"
           use:tri={state}
-          disabled={list.length === 0}
+          disabled={eligible(list).length === 0}
           onchange={(e) => change(e, () => setQuizzes(list, state !== 'all'))}
         />
         <span class="name folder">{label}</span>
@@ -263,6 +303,13 @@
   }
   .item:hover {
     background: var(--surface-2);
+  }
+  .item.off {
+    opacity: 0.45;
+  }
+  .item.off label,
+  label.item.off {
+    cursor: default;
   }
   label {
     flex: 1;

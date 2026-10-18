@@ -4,6 +4,7 @@ import {
   countByCompartment,
   LeitnerEngine,
   nextCompartment,
+  orient,
   pickNext,
   refill,
   refillCount,
@@ -163,5 +164,27 @@ describe('LeitnerEngine', () => {
     ]);
     expect(e.takeChanges()).toEqual([]);
     expect(x.compartment).toBe(1); // las cartas originales no se tocan
+  });
+});
+
+describe('orient', () => {
+  const ref = { a: 'en', b: 'es' };
+  const card = (a: string, b: string, langA: string, langB: string) => ({ pairId: 1, a, b, langA, langB });
+
+  it('da la vuelta a las palabras de un cuestionario con los idiomas al revés', () => {
+    expect(orient(card('perro', 'dog', 'es', 'en'), ref)).toEqual(card('dog', 'perro', 'en', 'es'));
+  });
+
+  it('deja igual las del mismo orden, las de otro par y las de una caja sin idiomas', () => {
+    const same = card('dog', 'perro', 'en', 'es');
+    const other = card('chien', 'perro', 'fr', 'es');
+    expect(orient(same, ref)).toBe(same);
+    expect(orient(other, ref)).toBe(other);
+    expect(orient(card('perro', 'dog', 'es', 'en'), null)).toEqual(card('perro', 'dog', 'es', 'en'));
+  });
+
+  it('no da la vuelta si los dos idiomas son el mismo', () => {
+    const mono = card('big', 'large', 'en', 'en');
+    expect(orient(mono, { a: 'en', b: 'en' })).toBe(mono);
   });
 });
