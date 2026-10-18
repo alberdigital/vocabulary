@@ -95,7 +95,7 @@
     transition: height 0.25s;
   }
   .full .fill {
-    background: color-mix(in srgb, var(--warn) 30%, transparent);
+    background: color-mix(in srgb, var(--full) 30%, transparent);
   }
   .num {
     position: relative;
