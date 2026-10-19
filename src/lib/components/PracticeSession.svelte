@@ -196,8 +196,10 @@
 
   function submitTyped(e?: SubmitEvent) {
     e?.preventDefault();
-    if (phase !== 'ask' || typed.trim() === '') return;
-    record(checkTyped(typed, expectedText), typed);
+    if (phase !== 'ask') return;
+    // En blanco el botón es «No lo sé»: cuenta como fallo, sin respuesta que dar por buena.
+    if (typed.trim() === '') record(false, null);
+    else record(checkTyped(typed, expectedText), typed);
     showFeedback();
   }
 
@@ -394,8 +396,13 @@
           />
           <!-- Durante el destello sigue a la vista (desactivado) para que nada se mueva. -->
           {#if phase === 'ask' || flash}
-            <button class="primary" type="submit" onpointerdown={noFocus} disabled={phase !== 'ask' || !typed.trim()}>
-              Comprobar <kbd>Intro</kbd>
+            <button class="primary" type="submit" onpointerdown={noFocus} disabled={phase !== 'ask'}>
+              <span class="stack">
+                {#each ['Comprobar', 'No lo sé'] as label (label)}
+                  <span class:shown={label === (typed.trim() ? 'Comprobar' : 'No lo sé')}>{label}</span>
+                {/each}
+              </span>
+              <kbd>Intro</kbd>
             </button>
           {/if}
         </form>
