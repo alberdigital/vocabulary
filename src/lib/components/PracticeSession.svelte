@@ -438,11 +438,10 @@
 
       {#if phase === 'feedback' && !lastCorrect}
         <div class="feedback wrong">
-          <div class="verdict">✗ No es correcto</div>
+          <div class="verdict">{parse(expectedText).full}</div>
           {#if handwriting && lastGiven !== null}
             <div>La IA leyó: <strong>{lastGiven || '(nada)'}</strong></div>
           {/if}
-          <div>Respuesta correcta: <strong>{parse(expectedText).full}</strong></div>
           <div class="row center">
             {#if lastGiven !== null}
               <button onpointerdown={noFocus} onclick={overrideAsCorrect}>
@@ -637,8 +636,11 @@
     font-weight: 700;
     font-size: 1.2rem;
   }
+  /* La palabra correcta, más grande que la escrita en el input (1.5rem). */
   .wrong .verdict {
     color: var(--bad);
+    font-size: 2rem;
+    word-break: break-word;
   }
   .extra {
     margin-top: 0.5rem;
