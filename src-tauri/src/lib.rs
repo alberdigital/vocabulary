@@ -166,6 +166,15 @@ UPDATE leitner_boxes SET
             WHERE bq.box_id = leitner_boxes.id ORDER BY q.name COLLATE NOCASE, q.id LIMIT 1);
 "#,
         },
+        Migration {
+            version: 5,
+            description: "repetir para continuar en las cajas de Leitner",
+            kind: MigrationKind::Up,
+            sql: r#"
+-- 1 = tras un fallo con teclado hay que escribir bien la palabra para pasar a la siguiente.
+ALTER TABLE leitner_boxes ADD COLUMN repeat_to_continue INTEGER NOT NULL DEFAULT 0;
+"#,
+        },
     ]
 }
 

@@ -17,7 +17,12 @@
   let quizzes = $state<QuizSummary[]>([]);
   let name = $state('');
   let firstCapacity = $state(SUGGESTED_FIRST_CAPACITY);
-  let opts = $state<SessionOptions>({ direction: 'AB', answerMode: 'typed', inputMode: 'keyboard' });
+  let opts = $state<SessionOptions>({
+    direction: 'AB',
+    answerMode: 'typed',
+    inputMode: 'keyboard',
+    repeatToContinue: false,
+  });
   let quizIds = $state(new Set<number>());
   let excluded = $state(new Set<number>());
   let pairs = $state(new Map<number, { id: number; a: string; b: string }[]>());
@@ -53,14 +58,19 @@
       if (id === null) {
         if (app.user) {
           const prefs = await repo.getUserPrefs(app.user.id);
-          if (prefs.session) opts = { ...prefs.session };
+          if (prefs.session) opts = { repeatToContinue: false, ...prefs.session };
         }
       } else {
         const box = await repo.getBox(id);
         if (!box || box.userId !== app.user?.id) return goto('/leitner');
         name = box.name;
         firstCapacity = box.firstCapacity;
-        opts = { direction: box.direction, answerMode: box.answerMode, inputMode: box.inputMode };
+        opts = {
+          direction: box.direction,
+          answerMode: box.answerMode,
+          inputMode: box.inputMode,
+          repeatToContinue: box.repeatToContinue,
+        };
         const sel = await repo.getBoxSelection(id);
         quizIds = new Set(sel.quizIds);
         excluded = new Set(sel.excludedPairIds);
@@ -201,6 +211,13 @@
           <label class="radio"><input type="radio" bind:group={opts.inputMode} value="keyboard" /> Teclado</label>
           <label class="radio"><input type="radio" bind:group={opts.inputMode} value="handwriting" /> A mano</label>
         </fieldset>
+        {#if opts.inputMode === 'keyboard'}
+          <fieldset>
+            <legend>Repetir para continuar</legend>
+            <label class="radio"><input type="radio" bind:group={opts.repeatToContinue} value={false} /> No</label>
+            <label class="radio"><input type="radio" bind:group={opts.repeatToContinue} value={true} /> Sí</label>
+          </fieldset>
+        {/if}
       {/if}
     </div>
 

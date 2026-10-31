@@ -173,6 +173,7 @@ export function buildBoxExport(box: ExportBox, quizzes: (Omit<ExportQuiz, 'pairs
       direction: box.direction,
       answerMode: box.answerMode,
       inputMode: box.inputMode,
+      repeatToContinue: box.repeatToContinue ?? false,
       langA: box.langA ?? null,
       langB: box.langB ?? null,
     },
@@ -205,6 +206,7 @@ export function parseBoxExport(text: string): BoxExportFile {
     (b.direction === 'AB' || b.direction === 'BA') &&
     (b.answerMode === 'typed' || b.answerMode === 'self') &&
     (b.inputMode === 'keyboard' || b.inputMode === 'handwriting') &&
+    (b.repeatToContinue === undefined || typeof b.repeatToContinue === 'boolean') &&
     [b.langA, b.langB].every((l) => l === undefined || l === null || typeof l === 'string') &&
     Array.isArray(d.quizzes) &&
     d.quizzes.every(isQuiz) &&

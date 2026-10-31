@@ -446,6 +446,7 @@ interface BoxRow {
   direction: 'AB' | 'BA';
   answer_mode: 'typed' | 'self';
   input_mode: 'keyboard' | 'handwriting';
+  repeat_to_continue: number;
   lang_a: string | null;
   lang_b: string | null;
   created_at: string;
@@ -460,6 +461,7 @@ const toBox = (r: BoxRow): LeitnerBox => ({
   direction: r.direction,
   answerMode: r.answer_mode,
   inputMode: r.input_mode,
+  repeatToContinue: r.repeat_to_continue === 1,
   langA: r.lang_a,
   langB: r.lang_b,
   createdAt: r.created_at,
@@ -468,7 +470,7 @@ const toBox = (r: BoxRow): LeitnerBox => ({
 
 export type BoxSettings = Pick<
   LeitnerBox,
-  'name' | 'firstCapacity' | 'direction' | 'answerMode' | 'inputMode' | 'langA' | 'langB'
+  'name' | 'firstCapacity' | 'direction' | 'answerMode' | 'inputMode' | 'repeatToContinue' | 'langA' | 'langB'
 >;
 
 /** Lista de ids como "$2,$3,…" a partir del parámetro offset + 1. */
@@ -489,10 +491,22 @@ export async function getBox(id: number): Promise<LeitnerBox | null> {
 export async function createBox(userId: number, b: BoxSettings): Promise<number> {
   const t = now();
   return insert(
-    `INSERT INTO leitner_boxes (user_id, name, first_capacity, direction, answer_mode, input_mode, lang_a, lang_b,
-       created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-    [userId, b.name.trim(), b.firstCapacity, b.direction, b.answerMode, b.inputMode, b.langA, b.langB, t, t]
+    `INSERT INTO leitner_boxes (user_id, name, first_capacity, direction, answer_mode, input_mode, repeat_to_continue,
+       lang_a, lang_b, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+    [
+      userId,
+      b.name.trim(),
+      b.firstCapacity,
+      b.direction,
+      b.answerMode,
+      b.inputMode,
+      b.repeatToContinue ? 1 : 0,
+      b.langA,
+      b.langB,
+      t,
+      t,
+    ]
   );
 }
 
@@ -500,8 +514,19 @@ export async function createBox(userId: number, b: BoxSettings): Promise<number>
 export async function updateBox(id: number, b: BoxSettings): Promise<void> {
   await exec(
     `UPDATE leitner_boxes SET name = $1, first_capacity = $2, direction = $3, answer_mode = $4, input_mode = $5,
-       lang_a = $6, lang_b = $7, updated_at = $8 WHERE id = $9`,
-    [b.name.trim(), b.firstCapacity, b.direction, b.answerMode, b.inputMode, b.langA, b.langB, now(), id]
+       repeat_to_continue = $6, lang_a = $7, lang_b = $8, updated_at = $9 WHERE id = $10`,
+    [
+      b.name.trim(),
+      b.firstCapacity,
+      b.direction,
+      b.answerMode,
+      b.inputMode,
+      b.repeatToContinue ? 1 : 0,
+      b.langA,
+      b.langB,
+      now(),
+      id,
+    ]
   );
   await refillBox(id);
 }

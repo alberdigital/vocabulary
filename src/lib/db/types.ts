@@ -6,6 +6,8 @@ export interface SessionOptions {
   direction: Direction;
   answerMode: AnswerMode;
   inputMode: InputMode;
+  /** Solo con teclado: tras un fallo hay que escribir bien la palabra para pasar a la siguiente. */
+  repeatToContinue?: boolean;
 }
 
 export interface User {

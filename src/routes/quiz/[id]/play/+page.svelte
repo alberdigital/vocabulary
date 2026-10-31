@@ -19,7 +19,12 @@
   );
 
   let quiz = $state<Quiz | null>(null);
-  let opts = $state<SessionOptions>({ direction: 'AB', answerMode: 'typed', inputMode: 'keyboard' });
+  let opts = $state<SessionOptions>({
+    direction: 'AB',
+    answerMode: 'typed',
+    inputMode: 'keyboard',
+    repeatToContinue: false,
+  });
   let engine = $state<QuizEngine<SavedPair> | null>(null);
   let startedAt = $state(0);
   let hwError = $state<string | null>(null);
@@ -34,7 +39,7 @@
       quiz = q;
       if (app.user) {
         const prefs = await repo.getUserPrefs(app.user.id);
-        if (prefs.session) opts = { ...prefs.session };
+        if (prefs.session) opts = { repeatToContinue: false, ...prefs.session };
       }
     })().catch(showError);
   });
@@ -174,6 +179,13 @@
             </p>
           {/if}
         </fieldset>
+        {#if opts.inputMode === 'keyboard'}
+          <fieldset>
+            <legend>Repetir para continuar</legend>
+            <label><input type="radio" bind:group={opts.repeatToContinue} value={false} /> No</label>
+            <label><input type="radio" bind:group={opts.repeatToContinue} value={true} /> Sí</label>
+          </fieldset>
+        {/if}
       {/if}
 
       <button class="primary big" onclick={start} disabled={pairsToPlay().length === 0}>Empezar <kbd>Intro</kbd></button>

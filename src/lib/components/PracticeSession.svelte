@@ -85,6 +85,10 @@
   let version = $state(0); // se incrementa para refrescar lo que depende del motor
   let phase = $state<Phase>('ask');
   let typed = $state('');
+  /** Con «Repetir para continuar»: la palabra fallada, vuelta a escribir. */
+  let retyped = $state('');
+  /** Intentos fallidos de repetirla: cada uno hace parpadear la palabra correcta. */
+  let blinks = $state(0);
   let lastCorrect = $state(false);
   let lastGiven = $state<string | null>(null);
   let lastScores = $state<{ expected: number; recognized: number } | undefined>();
@@ -96,6 +100,7 @@
   let now = $state(Date.now());
   let advanceTimer: ReturnType<typeof setTimeout> | undefined;
   let answerInput: HTMLInputElement | undefined = $state();
+  let repeatInput: HTMLInputElement | undefined = $state();
   let hwCanvas: HandwritingCanvas | undefined = $state();
   const timer = setInterval(() => (now = Date.now()), 250);
 
@@ -131,6 +136,8 @@
   const fromLang = $derived(item ? langName(ab ? item.langA : item.langB) : '');
   const toLang = $derived(item ? langName(ab ? item.langB : item.langA) : '');
   const handwriting = $derived(opts.answerMode === 'typed' && opts.inputMode === 'handwriting');
+  /** Tras un fallo con teclado hay que escribir bien la palabra para pasar a la siguiente. */
+  const repeat = $derived(opts.answerMode === 'typed' && opts.inputMode === 'keyboard' && !!opts.repeatToContinue);
   /** Acierto recién registrado: la palabra y la respuesta se ponen verdes un instante (a mano, además, se ve la respuesta). */
   const flash = $derived(phase === 'feedback' && lastCorrect);
   const hwButtonLabel = $derived(
@@ -169,6 +176,8 @@
     position = { round: engine.round, index: engine.roundDone + 1, size: engine.roundSize };
     phase = 'ask';
     typed = '';
+    retyped = '';
+    blinks = 0;
     lastGiven = null;
     lastScores = undefined;
     hwError = modelState === 'error' ? hwError : null;
@@ -188,10 +197,22 @@
     onanswered?.(current, correct);
   }
 
-  function showFeedback() {
+  async function showFeedback() {
     phase = 'feedback';
-    // Los aciertos pasan solos; los fallos esperan a que se pulse Intro.
+    // Los aciertos pasan solos; los fallos esperan a que se pulse Intro o, si hay que repetir, a que se escriba bien.
     if (lastCorrect) advanceTimer = setTimeout(nextQuestion, handwriting ? HANDWRITING_FLASH_MS : FLASH_MS);
+    else if (repeat) {
+      await tick();
+      repeatInput?.focus();
+    }
+  }
+
+  /** Intro en el cuadro de repetir: bien escrita, a la siguiente; si no, la palabra correcta parpadea. */
+  function submitRetyped(e: SubmitEvent) {
+    e.preventDefault();
+    if (phase !== 'feedback' || lastCorrect) return;
+    if (checkTyped(retyped, expectedText)) nextQuestion();
+    else blinks++;
   }
 
   function submitTyped(e?: SubmitEvent) {
@@ -289,6 +310,8 @@
     const isGo = key === 'Enter' || key === ' ';
 
     if (phase === 'feedback') {
+      // Mientras se repite la palabra, las teclas son para el campo (Intro lo recoge su formulario).
+      if (repeat && !lastCorrect) return;
       if (key === 'Enter') {
         e.preventDefault();
         nextQuestion();
@@ -438,18 +461,36 @@
 
       {#if phase === 'feedback' && !lastCorrect}
         <div class="feedback wrong">
-          <div class="verdict">{parse(expectedText).full}</div>
+          <!-- El key vuelve a crear la palabra para que el parpadeo empiece de nuevo en cada intento fallido. -->
+          {#key blinks}
+            <div class="verdict" class:blink={blinks > 0}>{parse(expectedText).full}</div>
+          {/key}
           {#if handwriting && lastGiven !== null}
             <div>La IA leyó: <strong>{lastGiven || '(nada)'}</strong></div>
           {/if}
-          <div class="row center">
-            {#if lastGiven !== null}
-              <button onpointerdown={noFocus} onclick={overrideAsCorrect}>
-                {handwriting ? 'La IA se equivocó, era correcto' : 'Marcar correcta'} <kbd>C</kbd>
+          {#if repeat}
+            <form class="repeat" onsubmit={submitRetyped}>
+              <input
+                bind:this={repeatInput}
+                bind:value={retyped}
+                placeholder="Escríbela bien para continuar"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+              />
+            </form>
+          {:else}
+            <div class="row center">
+              <button class="primary" onpointerdown={noFocus} onclick={nextQuestion}>Continuar <kbd>Intro</kbd></button>
+            </div>
+          {/if}
+          {#if lastGiven !== null}
+            <div class="row center">
+              <button class="link quiet" onpointerdown={noFocus} onclick={overrideAsCorrect}>
+                {handwriting ? 'La IA se equivocó, era correcto' : 'Marcar correcta'}
               </button>
-            {/if}
-            <button class="primary" onpointerdown={noFocus} onclick={nextQuestion}>Continuar <kbd>Intro</kbd></button>
-          </div>
+            </div>
+          {/if}
         </div>
       {/if}
 
@@ -641,6 +682,25 @@
     color: var(--bad);
     font-size: 2rem;
     word-break: break-word;
+  }
+  .verdict.blink {
+    animation: blink 0.16s step-end 3;
+  }
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+  form.repeat {
+    display: flex;
+    justify-content: center;
+  }
+  /* Más pequeño que el de la respuesta: con la letra de los botones. */
+  form.repeat input {
+    width: min(360px, 100%);
+    font-size: 1.2rem;
+    padding: 0.5rem 0.8rem;
+    text-align: center;
   }
   .extra {
     margin-top: 0.5rem;
