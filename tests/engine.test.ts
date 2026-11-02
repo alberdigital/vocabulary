@@ -39,6 +39,8 @@ describe('QuizEngine', () => {
     expect(e.finished).toBe(true);
     expect(e.firstRoundErrors).toBe(2);
     expect(e.totalErrors).toBe(3);
+    expect(e.total).toBe(4);
+    expect(e.totalCorrect).toBe(4);
   });
 
   it('permite corregir el último fallo como acierto', () => {
@@ -48,6 +50,7 @@ describe('QuizEngine', () => {
     e.answer(true); // b
     expect(e.finished).toBe(true);
     expect(e.totalErrors).toBe(0);
+    expect(e.totalCorrect).toBe(2);
     expect(e.answers[0].overridden).toBe(true);
   });
 

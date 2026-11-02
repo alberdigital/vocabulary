@@ -30,6 +30,9 @@ export interface PracticeEngine<T> {
   readonly roundSize: number | null;
   readonly roundDone: number;
   readonly totalErrors: number;
+  /** Palabras de la práctica y aciertos, para la barra; sin definir si no se muestran. */
+  readonly total?: number;
+  readonly totalCorrect?: number;
   answer(correct: boolean, given?: string | null, elapsedMs?: number): void;
   overrideLastAsCorrect(): void;
 }
@@ -43,10 +46,13 @@ export class QuizEngine<T> implements PracticeEngine<T> {
   roundSize: number;
   /** Cuántas se han contestado en la ronda actual. */
   roundDone = 0;
+  /** Palabras del cuestionario: cada una se acierta una vez para terminar. */
+  readonly total: number;
 
   constructor(items: T[], private shuffle: Shuffle = fisherYates) {
     this.queue = shuffle(items);
     this.roundSize = this.queue.length;
+    this.total = items.length;
   }
 
   get current(): T | undefined {
@@ -103,5 +109,9 @@ export class QuizEngine<T> implements PracticeEngine<T> {
 
   get totalErrors(): number {
     return this.answers.filter((a) => !a.correct).length;
+  }
+
+  get totalCorrect(): number {
+    return this.answers.filter((a) => a.correct).length;
   }
 }

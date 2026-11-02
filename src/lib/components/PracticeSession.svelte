@@ -123,6 +123,10 @@
     version;
     return engine.roundDone;
   });
+  const correct = $derived.by(() => {
+    version;
+    return engine.totalCorrect;
+  });
   const item = $derived.by(() => {
     version; // una corrección cambia el item sin cambiar current
     if (!current) return null;
@@ -363,6 +367,15 @@
     <header class="bar">
       <div class="row">
         <strong>{title}</strong>
+        {#if engine.total !== undefined}
+          <span class="muted total" title="Palabras del cuestionario">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+            </svg>
+            {engine.total}
+          </span>
+        {/if}
         <span class="muted">
           {#if position.size === null}
             {answered} respondida{answered === 1 ? '' : 's'}
@@ -370,7 +383,8 @@
             Ronda {position.round} · {position.index}/{position.size}
           {/if}
         </span>
-        {#if errors > 0}<span class="errors">✗ {errors}</span>{/if}
+        {#if correct !== undefined}<span class="correct" title="Aciertos">✓ {correct}</span>{/if}
+        {#if errors > 0}<span class="errors" title="Fallos">✗ {errors}</span>{/if}
       </div>
       <div class="row">
         <span class="clock">{formatDuration(now - startedAt)}</span>
@@ -540,6 +554,14 @@
     font-size: 1.1rem;
     min-width: 4.5rem;
     text-align: right;
+  }
+  .total {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .correct {
+    color: var(--ok);
   }
   .errors {
     color: var(--bad);
