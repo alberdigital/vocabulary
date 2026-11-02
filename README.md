@@ -44,6 +44,14 @@ npm run tauri dev    # aplicación en modo desarrollo
 npm run tauri build  # instaladores .deb y AppImage en src-tauri/target/release/bundle/
 ```
 
+Para generar solo la AppImage viendo el progreso del empaquetado:
+
+```bash
+npm run tauri build -- --bundles appimage --verbose
+```
+
+Sin `--verbose`, el empaquetado de la AppImage pasa varios minutos sin mostrar nada mientras copia las librerías de GTK y WebKitGTK, y parece que se ha colgado.
+
 Los datos se guardan en `~/.config/com.asantos.vocabulario/vocab.db` (la ruta exacta aparece en la pantalla de usuarios). Para hacer una copia de seguridad completa basta con copiar ese fichero.
 
 ## Desarrollo
