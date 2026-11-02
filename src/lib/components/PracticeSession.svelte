@@ -307,7 +307,6 @@
     }
     if (e.repeat) return;
     const key = e.key;
-    const isGo = key === 'Enter' || key === ' ';
 
     if (phase === 'feedback') {
       // Mientras se repite la palabra, las teclas son para el campo (Intro lo recoge su formulario).
@@ -322,14 +321,17 @@
       return;
     }
 
+    // En la autoevaluación solo valen Espacio y M: Intro no hace nada, para no dar una por buena sin querer.
     if (opts.answerMode === 'self') {
-      if (phase === 'ask' && isGo) {
+      if (key === 'Enter') {
+        e.preventDefault();
+      } else if (phase === 'ask' && key === ' ') {
         e.preventDefault();
         phase = 'revealed';
-      } else if (phase === 'revealed' && isGo) {
+      } else if (phase === 'revealed' && key === ' ') {
         e.preventDefault();
         selfAnswer(true);
-      } else if (phase === 'revealed' && key.toLowerCase() === 'n') {
+      } else if (phase === 'revealed' && key.toLowerCase() === 'm') {
         e.preventDefault();
         selfAnswer(false);
       }
@@ -395,13 +397,13 @@
         <div class="row center">
           {#if phase === 'ask'}
             <button class="primary big" onpointerdown={noFocus} onclick={() => (phase = 'revealed')}>
-              Mostrar respuesta <kbd>Espacio</kbd><kbd>Intro</kbd>
+              Mostrar respuesta <kbd>Espacio</kbd>
             </button>
           {:else}
             <button class="ok big" onpointerdown={noFocus} onclick={() => selfAnswer(true)}>
-              Bien <kbd>Espacio</kbd><kbd>Intro</kbd>
+              Bien <kbd>Espacio</kbd>
             </button>
-            <button class="bad big" onpointerdown={noFocus} onclick={() => selfAnswer(false)}>Mal <kbd>N</kbd></button>
+            <button class="bad big" onpointerdown={noFocus} onclick={() => selfAnswer(false)}>Mal <kbd>M</kbd></button>
           {/if}
         </div>
       {:else if !handwriting}

@@ -14,7 +14,7 @@ Aplicación de escritorio para aprender vocabulario con cuestionarios de pares d
 - **Teclado:** la respuesta debe coincidir exactamente, tildes incluidas. Solo se tolera que la primera letra cambie de mayúscula a minúscula o al revés, y se ignoran los espacios sobrantes.
 - **Aclaraciones:** lo que va entre paréntesis (`bank (of a river)`) se muestra al preguntar, pero no hace falta escribirlo.
 - **A mano:** no se comprueban tildes ni la diferencia ñ/n. Si la IA lee mal una respuesta correcta, el botón «La IA se equivocó» (tecla <kbd>C</kbd>) la da por buena.
-- **Autoevaluación:** <kbd>Espacio</kbd>/<kbd>Intro</kbd> muestran la respuesta y, después, la dan por buena; <kbd>N</kbd> la da por mala.
+- **Autoevaluación:** <kbd>Espacio</kbd> muestra la respuesta y, después, la da por buena; <kbd>M</kbd> la da por mala. <kbd>Intro</kbd> no hace nada.
 
 ## Cajas de Leitner
 
