@@ -197,6 +197,27 @@ fn db_path(app: tauri::AppHandle) -> Result<String, String> {
     Ok(dir.join("vocab.db").to_string_lossy().into_owned())
 }
 
+/// Fichero donde se recuerda si la ventana estaba maximizada al cerrar la aplicación.
+fn window_state_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    Some(app.path().app_config_dir().ok()?.join("ventana.json"))
+}
+
+fn load_maximized(app: &tauri::AppHandle) -> bool {
+    window_state_path(app)
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .and_then(|state| state["maximized"].as_bool())
+        .unwrap_or(false)
+}
+
+fn save_maximized(app: &tauri::AppHandle, maximized: bool) {
+    let Some(path) = window_state_path(app) else { return };
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(path, serde_json::json!({ "maximized": maximized }).to_string());
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -211,6 +232,21 @@ pub fn run() {
             read_text_file,
             db_path
         ])
+        .setup(|app| {
+            if load_maximized(app.handle()) {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.maximize();
+                }
+            }
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if let Ok(maximized) = window.is_maximized() {
+                    save_maximized(window.app_handle(), maximized);
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error al arrancar la aplicación");
 }
