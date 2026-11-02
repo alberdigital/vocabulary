@@ -77,6 +77,7 @@ describe('cajas de Leitner', () => {
     direction: 'BA' as const,
     answerMode: 'typed' as const,
     inputMode: 'handwriting' as const,
+    repeatToContinue: true,
     langA: 'es',
     langB: 'en',
   };
