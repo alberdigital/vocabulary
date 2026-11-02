@@ -15,6 +15,7 @@ Aplicación de escritorio para aprender vocabulario con cuestionarios de pares d
 - **Aclaraciones:** lo que va entre paréntesis (`bank (of a river)`) se muestra al preguntar, pero no hace falta escribirlo.
 - **A mano:** no se comprueban tildes ni la diferencia ñ/n. Si la IA lee mal una respuesta correcta, el botón «La IA se equivocó» (tecla <kbd>C</kbd>) la da por buena.
 - **Autoevaluación:** <kbd>Espacio</kbd> muestra la respuesta y, después, la da por buena; <kbd>M</kbd> la da por mala. <kbd>Intro</kbd> no hace nada.
+- **Corregir la anterior:** en autoevaluación y a mano, el enlace «La anterior acerté» / «La anterior me equivoqué» cambia la respuesta anterior desde la pregunta siguiente (solo en los cuestionarios).
 
 ## Cajas de Leitner
 

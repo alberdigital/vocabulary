@@ -30,11 +30,14 @@ export interface PracticeEngine<T> {
   readonly roundSize: number | null;
   readonly roundDone: number;
   readonly totalErrors: number;
+  readonly answers: readonly { correct: boolean }[];
   /** Palabras de la práctica y aciertos, para la barra; sin definir si no se muestran. */
   readonly total?: number;
   readonly totalCorrect?: number;
   answer(correct: boolean, given?: string | null, elapsedMs?: number): void;
   overrideLastAsCorrect(): void;
+  /** Cambia la última respuesta desde la pregunta siguiente; sin definir si el motor no lo permite. */
+  flipLast?(): void;
 }
 
 export class QuizEngine<T> implements PracticeEngine<T> {
@@ -100,6 +103,37 @@ export class QuizEngine<T> implements PracticeEngine<T> {
         this.round--;
         this.roundSize = 0;
       }
+    }
+  }
+
+  /**
+   * Cambia la última respuesta de acierto a fallo o al revés («La anterior acerté / me equivoqué»),
+   * aunque ya se esté preguntando la siguiente. Solo es válido antes de la siguiente respuesta;
+   * cambiarla dos veces la deja como estaba.
+   */
+  flipLast(): void {
+    const last = this.answers[this.answers.length - 1];
+    if (!last) return;
+    const overridden = !last.overridden;
+    if (last.correct) this.markLastAsWrong(last);
+    else this.overrideLastAsCorrect();
+    last.overridden = overridden;
+  }
+
+  private markLastAsWrong(last: EngineAnswer<T>): void {
+    last.correct = false;
+    if (this.round !== last.round) {
+      // Era la última de su ronda y ya ha empezado la siguiente: se pregunta al final de esta.
+      this.queue.push(last.item);
+      this.roundSize++;
+    } else if (this.queue.length > 0) {
+      this.failedThisRound.push(last.item);
+    } else {
+      // Era la última de todas: hace falta una ronda nueva solo con ella.
+      this.round++;
+      this.queue = [last.item];
+      this.roundSize = 1;
+      this.roundDone = 0;
     }
   }
 

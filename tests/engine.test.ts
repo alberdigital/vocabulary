@@ -73,4 +73,59 @@ describe('QuizEngine', () => {
     expect(e.queue).toEqual(['a']);
     expect(e.roundSize).toBe(1);
   });
+
+  it('cambiar a fallo un acierto de la ronda lo repite en la siguiente', () => {
+    const e = new QuizEngine(['a', 'b', 'c'], identity);
+    e.answer(true); // a
+    e.flipLast();
+    expect(e.answers[0]).toMatchObject({ correct: false, overridden: true });
+    e.answer(true); // b
+    e.answer(true); // c
+    expect(e.round).toBe(2);
+    expect(e.queue).toEqual(['a']);
+  });
+
+  it('cambiar a fallo el último acierto de una ronda lo añade al final de la siguiente', () => {
+    const e = new QuizEngine(['a', 'b'], identity);
+    e.answer(false); // a
+    e.answer(true); // b: empieza la ronda 2 con [a]
+    e.flipLast();
+    expect(e.round).toBe(2);
+    expect(e.queue).toEqual(['a', 'b']);
+    expect(e.roundSize).toBe(2);
+    expect(e.totalErrors).toBe(2);
+  });
+
+  it('cambiar a fallo el último acierto de todos abre una ronda nueva', () => {
+    const e = new QuizEngine(['a'], identity);
+    e.answer(true);
+    expect(e.finished).toBe(true);
+    e.flipLast();
+    expect(e.finished).toBe(false);
+    expect(e.round).toBe(2);
+    expect(e.queue).toEqual(['a']);
+  });
+
+  it('cambiar a acierto un fallo ya en la ronda siguiente lo quita de ella', () => {
+    const e = new QuizEngine(['a', 'b', 'c'], identity);
+    e.answer(false); // a
+    e.answer(true); // b
+    e.answer(false); // c: ronda 2 con [a, c]
+    e.flipLast();
+    expect(e.queue).toEqual(['a']);
+    expect(e.roundSize).toBe(1);
+    expect(e.answers[2]).toMatchObject({ correct: true, overridden: true });
+  });
+
+  it('cambiar dos veces la respuesta la deja como estaba', () => {
+    const e = new QuizEngine(['a', 'b'], identity);
+    e.answer(true); // a
+    e.answer(false); // b: ronda 2 con [b]
+    e.flipLast();
+    expect(e.finished).toBe(true);
+    e.flipLast();
+    expect(e.answers[1]).toMatchObject({ correct: false, overridden: false });
+    expect(e.round).toBe(2);
+    expect(e.queue).toEqual(['b']);
+  });
 });

@@ -127,6 +127,13 @@
     version;
     return engine.totalCorrect;
   });
+  /** Cómo quedó la respuesta anterior, si se puede cambiar desde esta pregunta; null si no. */
+  const previousCorrect = $derived.by(() => {
+    version;
+    if (!engine.flipLast || (opts.answerMode !== 'self' && !handwriting)) return null;
+    if (phase !== 'ask' && phase !== 'revealed') return null;
+    return engine.answers.at(-1)?.correct ?? null;
+  });
   const item = $derived.by(() => {
     version; // una corrección cambia el item sin cambiar current
     if (!current) return null;
@@ -266,6 +273,16 @@
     version++;
     onoverride?.(current);
     advanceTimer = setTimeout(nextQuestion, handwriting ? HANDWRITING_FLASH_MS : FLASH_MS);
+  }
+
+  /** «La anterior acerté / me equivoqué»: corrige la respuesta anterior desde la pregunta siguiente. */
+  function flipPrevious() {
+    if (previousCorrect === null) return;
+    engine.flipLast?.();
+    version++;
+    // La anterior puede entrar en la ronda o salir de ella (incluso ser la que se pregunta), o haberse terminado.
+    if (engine.current !== current || engine.finished) nextQuestion();
+    else position = { ...position, size: engine.roundSize };
   }
 
   /** Pasa a la siguiente sin contar la actual (si ya se respondió, la respuesta se queda). */
@@ -510,8 +527,13 @@
         </div>
       {/if}
 
-      {#if (actions || oneditword) && phase !== 'checking'}
+      {#if (actions || oneditword || previousCorrect !== null) && phase !== 'checking'}
         <div class="row center extra">
+          {#if previousCorrect !== null}
+            <button class="link quiet" onpointerdown={noFocus} onclick={flipPrevious}>
+              {previousCorrect ? 'La anterior me equivoqué' : 'La anterior acerté'}
+            </button>
+          {/if}
           {#if oneditword}
             <button class="link quiet" onpointerdown={noFocus} onclick={() => (editingSince = Date.now())}>
               Editar últimas palabras

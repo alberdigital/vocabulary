@@ -100,7 +100,7 @@
     </div>
 
     {#if overridden > 0}
-      <p class="muted">{overridden} respuesta{overridden === 1 ? '' : 's'} a mano corregida{overridden === 1 ? '' : 's'} manualmente («la IA se equivocó»).</p>
+      <p class="muted">{overridden} respuesta{overridden === 1 ? '' : 's'} corregida{overridden === 1 ? '' : 's'} durante la práctica.</p>
     {/if}
 
     <div class="row actions">
