@@ -1,4 +1,7 @@
 export const LANGUAGES: Record<string, string> = {
+  // Para contenidos que no son de idiomas.
+  pregunta: 'Pregunta',
+  respuesta: 'Respuesta',
   es: 'Español',
   en: 'Inglés',
   fr: 'Francés',
@@ -15,9 +18,6 @@ export const LANGUAGES: Record<string, string> = {
   pl: 'Polaco',
   ro: 'Rumano',
   la: 'Latín',
-  // Para contenidos que no son de idiomas.
-  pregunta: 'Pregunta',
-  respuesta: 'Respuesta',
 };
 
 export function langName(code: string): string {
