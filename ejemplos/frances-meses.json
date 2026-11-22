@@ -1,0 +1,26 @@
+{
+  "format": "vocabulario",
+  "version": 1,
+  "folders": [],
+  "quizzes": [
+    {
+      "name": "Francés: meses del año",
+      "langA": "fr",
+      "langB": "es",
+      "pairs": [
+        ["janvier", "enero"],
+        ["février", "febrero"],
+        ["mars", "marzo"],
+        ["avril", "abril"],
+        ["mai", "mayo"],
+        ["juin", "junio"],
+        ["juillet", "julio"],
+        ["août", "agosto"],
+        ["septembre", "septiembre"],
+        ["octobre", "octubre"],
+        ["novembre", "noviembre"],
+        ["décembre", "diciembre"]
+      ]
+    }
+  ]
+}

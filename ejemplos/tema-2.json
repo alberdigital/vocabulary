@@ -1,0 +1,29 @@
+{
+  "format": "vocabulario",
+  "version": 1,
+  "folders": [],
+  "quizzes": [
+    {
+      "name": "Vocabulario tema 2: tecnología y adverbios de frecuencia",
+      "langA": "en",
+      "langB": "es",
+      "pairs": [
+        ["headphones", "auriculares"],
+        ["e-reader", "lector de libros electrónicos"],
+        ["printer", "impresora"],
+        ["speaker", "altavoz"],
+        ["games console", "videoconsola"],
+        ["camera", "cámara"],
+        ["laptop", "portátil (ordenador)"],
+        ["screen", "pantalla"],
+        ["smart watch", "reloj inteligente"],
+        ["mobile phone", "teléfono móvil"],
+        ["always", "siempre"],
+        ["usually", "normalmente"],
+        ["sometimes", "a veces"],
+        ["often", "a menudo"],
+        ["never", "nunca"]
+      ]
+    }
+  ]
+}

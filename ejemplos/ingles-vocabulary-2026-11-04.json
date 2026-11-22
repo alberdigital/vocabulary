@@ -1,0 +1,32 @@
+{
+  "format": "vocabulario",
+  "version": 1,
+  "folders": [],
+  "quizzes": [
+    {
+      "name": "Inglés: vocabulary (4 de noviembre de 2026)",
+      "langA": "en",
+      "langB": "es",
+      "pairs": [
+        ["find", "encontrar"],
+        ["van", "furgoneta"],
+        ["often", "a menudo"],
+        ["print", "imprimir"],
+        ["write", "escribir"],
+        ["upload", "subir (a internet)"],
+        ["turn on", "encender"],
+        ["turn off", "apagar"],
+        ["advertisement", "anuncio"],
+        ["both", "ambos"],
+        ["miss", "extrañar (echar de menos)"],
+        ["missing cats", "gatos perdidos"],
+        ["village", "pueblo"],
+        ["homework", "deberes"],
+        ["website", "página web"],
+        ["builder", "constructor"],
+        ["picture", "imagen (foto)"],
+        ["buy", "comprar"]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "format": "vocabulario",
+  "version": 1,
+  "folders": [],
+  "quizzes": [
+    {
+      "name": "Francés: los colores",
+      "langA": "fr",
+      "langB": "es",
+      "pairs": [
+        ["rouge", "rojo"],
+        ["blanc", "blanco"],
+        ["vert", "verde"],
+        ["bleu", "azul"],
+        ["jaune", "amarillo"],
+        ["marron", "marrón"],
+        ["rose", "rosa"],
+        ["violet", "morado (violeta)"],
+        ["orange", "naranja"],
+        ["noir", "negro"],
+        ["gris", "gris"]
+      ]
+    }
+  ]
+}
