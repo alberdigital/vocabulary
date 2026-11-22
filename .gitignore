@@ -11,3 +11,8 @@ vite.config.ts.timestamp-*
 
 # Recursos descargados por scripts/fetch-assets.mjs
 /static/models
+
+# Iconos que genera `tauri icon` pero que el bundle de escritorio no usa
+/src-tauri/icons/android/
+/src-tauri/icons/ios/
+/src-tauri/icons/64x64.png
