@@ -1,0 +1,55 @@
+# Compila los instaladores de Windows (.msi y -setup.exe) en una máquina de GitHub.
+# - Al subir un tag v* (por ejemplo v0.2.0): los sube a una Release en borrador.
+# - Con «Run workflow» en la pestaña Actions: los deja como artefacto de la ejecución.
+
+name: Compilar para Windows
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write # para crear la Release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # Modelo de escritura a mano (~65 MB): se guarda en caché para no descargarlo en cada ejecución.
+      - uses: actions/cache@v4
+        with:
+          path: static/models
+          key: modelo-${{ hashFiles('scripts/fetch-assets.mjs') }}
+
+      - run: npm ci # el postinstall descarga el modelo si no está en caché
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Sin tag (ejecución manual), tagName queda vacío y no se crea Release.
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          releaseName: Vocabulario ${{ github.ref_name }}
+          releaseBody: Instaladores de Windows. El .exe y el .msi no están firmados.
+          releaseDraft: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vocabulario-windows
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error

@@ -55,6 +55,21 @@ Sin `--verbose`, el empaquetado de la AppImage pasa varios minutos sin mostrar n
 
 Los datos se guardan en `~/.config/com.asantos.vocabulario/vocab.db` (la ruta exacta aparece en la pantalla de usuarios). Para hacer una copia de seguridad completa basta con copiar ese fichero.
 
+## Windows
+
+Los instaladores de Windows (`.msi` y `-setup.exe`) los compila GitHub Actions en una máquina Windows (`.github/workflows/windows.yml`):
+
+- **Versión publicada:** cambiar `version` en `src-tauri/tauri.conf.json` (es la que llevan los nombres de los instaladores), commitear y subir un tag con esa versión:
+
+  ```bash
+  git tag v0.2.0 && git push origin v0.2.0
+  ```
+
+  Al terminar, los instaladores están en una Release en borrador en GitHub, que hay que publicar a mano.
+- **Prueba sin versión:** pestaña Actions → «Compilar para Windows» → «Run workflow». Los instaladores quedan como artefacto `vocabulario-windows` de esa ejecución.
+
+Los instaladores no están firmados: Windows SmartScreen avisa al instalar («Más información» → «Ejecutar de todas formas»). En Windows los datos se guardan en `%APPDATA%\com.asantos.vocabulario\vocab.db`.
+
 ## Desarrollo
 
 ```bash
